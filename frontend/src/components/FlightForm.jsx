@@ -219,6 +219,8 @@ const FlightForm = ({ onFlightAdded }) => {
                     <option value="PRINCIPAL">PRINCIPAL</option>
                     <option value="MAYOR">MAYOR</option>
                     <option value="JEFE">JEFE</option>
+                    <option value="SUBINSPECTOR">SUBINSPECTOR</option>
+                    <option value="INSPECTOR">INSPECTOR</option>
                 </select>
                 <input type="text" name="nombreOficial" placeholder="NOMBRE Y APELLIDO" value={formData.nombreOficial} onChange={handleChange} className="p-3 bg-slate-900 text-white border border-slate-700 rounded-lg uppercase outline-none" required />
                 <input type="text" name="lupOficial" placeholder="LUP" value={formData.lupOficial} onChange={handleChange} className="p-3 bg-slate-900 text-white border border-slate-700 rounded-lg outline-none" required />
