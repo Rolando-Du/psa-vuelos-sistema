@@ -18,7 +18,7 @@ export const getFlights = async (req, res) => {
 // @route   POST /api/flights
 export const createFlight = async (req, res) => {
     try {
-        // req.body ahora contiene gradoOficial, nombreOficial, lupOficial, etc.
+        // req.body ahora contiene gradoOficial, nombreOficial, lupOficial
         const newFlight = new Flight(req.body);
         const savedFlight = await newFlight.save();
         res.status(201).json(savedFlight);
