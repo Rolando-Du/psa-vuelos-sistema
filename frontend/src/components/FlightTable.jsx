@@ -92,7 +92,7 @@ const FlightTable = ({ refreshTrigger }) => {
             <div className="bg-slate-900/40 backdrop-blur-md p-6 border border-slate-800 rounded-2xl shadow-2xl">
                 <div className="flex flex-col md:flex-row gap-6 items-end">
                     
-                    {/* Input Matrícula - Más ancho y con lupa corregida */}
+                    {/* Input Matrícula */}
                     <div className="flex-1 w-full">
                         <label className="text-[11px] text-slate-400 font-black uppercase tracking-widest mb-2 block ml-1">
                             Aeronave (Matrícula)
@@ -158,7 +158,6 @@ const FlightTable = ({ refreshTrigger }) => {
                 )}
             </div>
 
-            {/* TABLA CON UI MEJORADA */}
             <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl">
                 <div className="p-4 bg-slate-800/20 border-b border-slate-800 flex justify-between items-center">
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">

@@ -19,7 +19,7 @@ const StatsCard = ({ title, value, icon: Icon, color }) => {
                     </h3>
                 </div>
                 
-                {/* Aseguramos el renderizado del icono */}
+                {/* renderizado del icono */}
                 <div className="p-3 rounded-xl bg-slate-900/50 flex items-center justify-center">
                     {Icon && <Icon size={24} className="opacity-90" />}
                 </div>
