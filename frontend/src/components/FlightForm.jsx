@@ -289,7 +289,7 @@ const FlightForm = ({ onFlightAdded }) => {
           <div className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
             <div className="flex flex-col gap-1">
               <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
-                DNI
+                DNI/PASS
               </label>
               <input
                 type="text"
