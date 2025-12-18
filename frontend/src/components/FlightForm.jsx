@@ -200,8 +200,8 @@ const FlightForm = ({ onFlightAdded }) => {
             <div className="flex flex-col gap-1">
               <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">TRIP/PAX</label>
               <select name="tripPax" value={personaActual.tripPax} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-blue-400 font-bold rounded-lg border border-slate-700 outline-none text-sm">
-                <option value="T">TRIPULACIÓN</option>
-                <option value="P">PASAJERO</option>
+                <option value="T">TRIP</option>
+                <option value="P">PAx</option>
               </select>
             </div>
 
