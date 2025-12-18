@@ -18,7 +18,7 @@ const FlightForm = ({ onFlightAdded }) => {
     gradoOficial: "AYUDANTE",
     nombreOficial: "",
     lupOficial: "",
-    observaciones: "", // Campo para herramientas, victorinox, etc.
+    observaciones: "",
   };
 
   const [formData, setFormData] = useState(initialState);
@@ -29,7 +29,7 @@ const FlightForm = ({ onFlightAdded }) => {
     apellidoNombre: "",
     tipoDni: "DNI",
     nroDni: "",
-    tripPax: "T",
+    tripPax: "T", // Valor inicial correcto para la DB
     equipajeMano: 0,
     equipajeBodega: 0,
     nacionalidad: "ARG"
@@ -42,7 +42,7 @@ const FlightForm = ({ onFlightAdded }) => {
         setHistoricoVuelos(res.data);
       // eslint-disable-next-line no-unused-vars
       } catch (error) {
-        console.error("Error cargando historial para autocompletado");
+        console.error("Error cargando historial");
       }
     };
     cargarHistorial();
@@ -67,7 +67,7 @@ const FlightForm = ({ onFlightAdded }) => {
           nroDni: value,
           apellidoNombre: personaEncontrada.apellidoNombre,
           nacionalidad: personaEncontrada.nacionalidad || "ARG",
-          tripPax: personaEncontrada.tripPax
+          tripPax: personaEncontrada.tripPax || "T"
         });
         return;
       }
@@ -118,15 +118,13 @@ const FlightForm = ({ onFlightAdded }) => {
       onFlightAdded();
       setFormData(initialState);
       setListaPersonas([]);
-    // eslint-disable-next-line no-unused-vars
     } catch (err) {
-      Swal.fire({ icon: "error", title: "Error al guardar" });
+      Swal.fire({ icon: "error", title: "Error al guardar", text: err.response?.data?.message || "Verifique los datos" });
     }
   };
 
   return (
     <div className="bg-slate-900 rounded-2xl border border-blue-900/20 shadow-2xl overflow-hidden">
-      {/* Selector de Movimiento */}
       <div className="flex border-b border-slate-800">
         <button type="button" onClick={() => setFormData({...formData, tipoMovimiento: "ARRIBO"})} 
           className={`flex-1 py-4 font-black tracking-widest transition-all ${formData.tipoMovimiento === "ARRIBO" ? "bg-blue-600 text-white" : "bg-slate-900 text-slate-500 hover:text-slate-300"}`}>
@@ -139,8 +137,6 @@ const FlightForm = ({ onFlightAdded }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="p-8 space-y-8">
-        
-        {/* SECCIÓN 1: DATOS DEL VUELO */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1">
             <label className="text-[10px] text-slate-500 font-bold ml-1 uppercase">Fecha</label>
@@ -157,55 +153,48 @@ const FlightForm = ({ onFlightAdded }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <input type="text" name="tipoAeronave" placeholder="TIPO AERONAVE" value={formData.tipoAeronave} onChange={handleChange} className="p-3 bg-slate-800 text-white rounded-lg border border-slate-700 uppercase outline-none" />
+          <input type="text" name="tipoAeronave" placeholder="TIPO AERONAVE" value={formData.tipoAeronave} onChange={handleChange} className="p-3 bg-slate-800 text-white rounded-lg border border-slate-700 uppercase outline-none" required />
           <input type="text" name="propietario" placeholder="PROPIETARIO" value={formData.propietario} onChange={handleChange} className="p-3 bg-slate-800 text-white rounded-lg border border-slate-700 uppercase outline-none" />
-          <input type="text" name={formData.tipoMovimiento === 'ARRIBO' ? 'procedencia' : 'destino'} placeholder={formData.tipoMovimiento === 'ARRIBO' ? 'PROCEDENCIA' : 'DESTINO'} value={formData.tipoMovimiento === 'ARRIBO' ? formData.procedencia : formData.destino} onChange={handleChange} className="p-3 bg-slate-800 text-white rounded-lg border border-blue-500/30 uppercase outline-none" />
+          <input type="text" name={formData.tipoMovimiento === 'ARRIBO' ? 'procedencia' : 'destino'} placeholder={formData.tipoMovimiento === 'ARRIBO' ? 'PROCEDENCIA' : 'DESTINO'} value={formData.tipoMovimiento === 'ARRIBO' ? formData.procedencia : formData.destino} onChange={handleChange} className="p-3 bg-slate-800 text-white rounded-lg border border-blue-500/30 uppercase outline-none" required />
         </div>
 
-        {/* SECCIÓN 2: MANIFIESTO */}
         <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-blue-400 font-black text-sm uppercase tracking-widest flex items-center gap-2">
               <Users size={18}/> Manifiesto de Personas
             </h3>
-            <span className="text-[10px] text-slate-500 italic">Autocompletado por DNI activo</span>
+            <span className="text-[10px] text-slate-500 italic">Autocompletado activo</span>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
-            {/* Input DNI */}
             <div className="flex flex-col gap-1">
               <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">DNI</label>
               <input type="text" name="nroDni" placeholder="DNI" value={personaActual.nroDni} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-white rounded-lg border border-slate-700 font-mono outline-none text-sm w-full" />
             </div>
             
-            {/* Input Nombre */}
             <div className="flex flex-col gap-1 md:col-span-2">
               <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">Apellido y Nombre</label>
               <input type="text" name="apellidoNombre" placeholder="NOMBRE COMPLETO" value={personaActual.apellidoNombre} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-white rounded-lg border border-slate-700 uppercase outline-none text-sm w-full" />
             </div>
             
-            {/* Input Equipaje Mano */}
             <div className="flex flex-col gap-1">
-              <label className="text-[9px] text-amber-500 font-bold uppercase ml-1 tracking-tighter">Eq. Mano</label>
-              <input type="number" name="equipajeMano" placeholder="MANO" title="Equipaje de Mano" value={personaActual.equipajeMano} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-amber-500 rounded-lg border border-slate-700 outline-none text-sm text-center font-bold" min="0" />
+              <label className="text-[9px] text-amber-500 font-bold uppercase ml-1">Mano</label>
+              <input type="number" name="equipajeMano" value={personaActual.equipajeMano} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-amber-500 rounded-lg border border-slate-700 outline-none text-sm text-center font-bold" min="0" />
             </div>
             
-            {/* Input Equipaje Bodega */}
             <div className="flex flex-col gap-1">
-              <label className="text-[9px] text-blue-400 font-bold uppercase ml-1 tracking-tighter">Eq. Bodega</label>
-              <input type="number" name="equipajeBodega" placeholder="BODEGA" title="Equipaje de Bodega" value={personaActual.equipajeBodega} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-blue-400 rounded-lg border border-slate-700 outline-none text-sm text-center font-bold" min="0" />
+              <label className="text-[9px] text-blue-400 font-bold uppercase ml-1">Bodega</label>
+              <input type="number" name="equipajeBodega" value={personaActual.equipajeBodega} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-blue-400 rounded-lg border border-slate-700 outline-none text-sm text-center font-bold" min="0" />
             </div>
 
-            {/* Selector Rol */}
             <div className="flex flex-col gap-1">
-              <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">TRIP/PAX</label>
+              <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">Rol</label>
               <select name="tripPax" value={personaActual.tripPax} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-blue-400 font-bold rounded-lg border border-slate-700 outline-none text-sm">
                 <option value="T">TRIP</option>
                 <option value="P">PAX</option>
               </select>
             </div>
 
-            {/* Botón Cargar */}
             <button type="button" onClick={agregarPersonaALista} className="h-9.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center gap-2 font-black text-[10px] transition-all uppercase px-4">
               <UserPlus size={16}/> Cargar
             </button>
@@ -213,7 +202,7 @@ const FlightForm = ({ onFlightAdded }) => {
 
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
             {listaPersonas.map((p, index) => (
-              <div key={index} className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-slate-800 animate-in slide-in-from-left-2">
+              <div key={index} className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-slate-800">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${p.tripPax === 'T' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
@@ -232,7 +221,6 @@ const FlightForm = ({ onFlightAdded }) => {
           </div>
         </div>
 
-        {/* SECCIÓN 3: OBSERVACIONES */}
         <div className="space-y-2">
           <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest ml-1 flex items-center gap-2">
             <MessageSquare size={14}/> Observaciones y Elementos Controlados
@@ -241,12 +229,11 @@ const FlightForm = ({ onFlightAdded }) => {
             name="observaciones" 
             value={formData.observaciones} 
             onChange={handleChange} 
-            placeholder="DETALLE AQUÍ HERRAMIENTAS, ELEMENTOS PUNZOCORTANTES O NOVEDADES DEL VUELO..."
+            placeholder="DETALLE AQUÍ HERRAMIENTAS O NOVEDADES..."
             className="w-full p-4 bg-slate-950 text-slate-200 rounded-xl border border-slate-800 focus:border-blue-500/50 outline-none min-h-30 resize-none uppercase text-sm font-medium tracking-wide"
           />
         </div>
 
-        {/* SECCIÓN 4: OFICIAL DE TURNO */}
         <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-4">
             <h3 className="text-slate-500 font-black text-[10px] uppercase tracking-[0.2em]">Oficial de Turno</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
