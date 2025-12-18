@@ -5,20 +5,17 @@ const flightSchema = new mongoose.Schema({
     hora: { type: String, required: true },
     matricula: { type: String, required: true },
     tipoAeronave: { type: String, required: true },
-    propietario: { type: String },
+    propietario: { type: String, default: '' },
     procedencia: { type: String, default: '' },
     destino: { type: String, default: '' },
     tipoMovimiento: { type: String, enum: ['ARRIBO', 'PARTIDA'], required: true },
     
-    // Lista de personas
     personas: [{
         apellidoNombre: { type: String, required: true },
         tipoDni: { type: String, default: 'DNI' },
         nroDni: { type: String, required: true },
-        // Ajustado a 'T' y 'P' para coincidir con el estado del formulario
         tripPax: { type: String, enum: ['T', 'P'], default: 'T' },
         nacionalidad: { type: String, default: 'ARG' },
-        // Campos de equipaje 
         equipajeMano: { type: Number, default: 0 },
         equipajeBodega: { type: Number, default: 0 },
     }],
@@ -26,13 +23,12 @@ const flightSchema = new mongoose.Schema({
     gradoOficial: { type: String, required: true },
     nombreOficial: { type: String, required: true },
     lupOficial: { type: String, required: true },
-    
-    // Campo para herramientas o cualquier novedad
     observaciones: { type: String, default: '' } 
 }, { 
     timestamps: true 
 });
 
+// Forzar matrícula siempre en mayúsculas
 flightSchema.pre('save', function(next) {
     if (this.matricula) {
         this.matricula = this.matricula.toUpperCase();
