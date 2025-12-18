@@ -15,8 +15,10 @@ const flightSchema = new mongoose.Schema({
         apellidoNombre: { type: String, required: true },
         tipoDni: { type: String, default: 'DNI' },
         nroDni: { type: String, required: true },
+        // Ajustado a 'T' y 'P' para coincidir con el estado del formulario
         tripPax: { type: String, enum: ['T', 'P'], default: 'T' },
         nacionalidad: { type: String, default: 'ARG' },
+        // Campos de equipaje 
         equipajeMano: { type: Number, default: 0 },
         equipajeBodega: { type: Number, default: 0 },
     }],
@@ -25,8 +27,17 @@ const flightSchema = new mongoose.Schema({
     nombreOficial: { type: String, required: true },
     lupOficial: { type: String, required: true },
     
-    // Este campo guarda herramientas, victorinox, etc.
+    // Campo para herramientas o cualquier novedad
     observaciones: { type: String, default: '' } 
-}, { timestamps: true });
+}, { 
+    timestamps: true 
+});
+
+flightSchema.pre('save', function(next) {
+    if (this.matricula) {
+        this.matricula = this.matricula.toUpperCase();
+    }
+    next();
+});
 
 export default mongoose.model('Flight', flightSchema);
