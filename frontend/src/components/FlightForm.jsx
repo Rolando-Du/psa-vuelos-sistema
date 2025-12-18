@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Send, UserPlus, Trash2, Users, MessageSquare } from "lucide-react";
+import { Send, UserPlus, Trash2, Users, MessageSquare, Briefcase, Package } from "lucide-react";
 import api from "../api/axios";
 import Swal from "sweetalert2";
 
@@ -72,7 +72,9 @@ const FlightForm = ({ onFlightAdded }) => {
         return;
       }
     }
-    setPersonaActual({ ...personaActual, [name]: value });
+    
+    const finalValue = (name === "equipajeMano" || name === "equipajeBodega") ? (parseInt(value) || 0) : value;
+    setPersonaActual({ ...personaActual, [name]: finalValue });
   };
 
   const agregarPersonaALista = () => {
@@ -169,24 +171,58 @@ const FlightForm = ({ onFlightAdded }) => {
             <span className="text-[10px] text-slate-500 italic">Autocompletado por DNI activo</span>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <input type="text" name="nroDni" placeholder="DNI" value={personaActual.nroDni} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-white rounded-lg border border-slate-700 font-mono outline-none" />
-            <input type="text" name="apellidoNombre" placeholder="APELLIDO Y NOMBRE" value={personaActual.apellidoNombre} onChange={handlePersonaChange} className="md:col-span-2 p-2 bg-slate-900 text-white rounded-lg border border-slate-700 uppercase outline-none" />
-            <select name="tripPax" value={personaActual.tripPax} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-blue-400 font-bold rounded-lg border border-slate-700 outline-none">
-              <option value="T">TRIPULANTE</option>
-              <option value="P">PASAJERO</option>
-            </select>
-            <button type="button" onClick={agregarPersonaALista} className="bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center gap-2 font-black text-xs transition-all uppercase">
-              <UserPlus size={16}/> Agregar
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
+            {/* Input DNI */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">DNI</label>
+              <input type="text" name="nroDni" placeholder="DNI" value={personaActual.nroDni} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-white rounded-lg border border-slate-700 font-mono outline-none text-sm w-full" />
+            </div>
+            
+            {/* Input Nombre */}
+            <div className="flex flex-col gap-1 md:col-span-2">
+              <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">Apellido y Nombre</label>
+              <input type="text" name="apellidoNombre" placeholder="NOMBRE COMPLETO" value={personaActual.apellidoNombre} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-white rounded-lg border border-slate-700 uppercase outline-none text-sm w-full" />
+            </div>
+            
+            {/* Input Equipaje Mano */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] text-amber-500 font-bold uppercase ml-1 tracking-tighter">Eq. Mano</label>
+              <input type="number" name="equipajeMano" placeholder="MANO" title="Equipaje de Mano" value={personaActual.equipajeMano} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-amber-500 rounded-lg border border-slate-700 outline-none text-sm text-center font-bold" min="0" />
+            </div>
+            
+            {/* Input Equipaje Bodega */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] text-blue-400 font-bold uppercase ml-1 tracking-tighter">Eq. Bodega</label>
+              <input type="number" name="equipajeBodega" placeholder="BODEGA" title="Equipaje de Bodega" value={personaActual.equipajeBodega} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-blue-400 rounded-lg border border-slate-700 outline-none text-sm text-center font-bold" min="0" />
+            </div>
+
+            {/* Selector Rol */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">TRIP/PAX</label>
+              <select name="tripPax" value={personaActual.tripPax} onChange={handlePersonaChange} className="p-2 bg-slate-900 text-blue-400 font-bold rounded-lg border border-slate-700 outline-none text-sm">
+                <option value="T">TRIPULACIÓN</option>
+                <option value="P">PASAJERO</option>
+              </select>
+            </div>
+
+            {/* Botón Cargar */}
+            <button type="button" onClick={agregarPersonaALista} className="h-9.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center gap-2 font-black text-[10px] transition-all uppercase px-4">
+              <UserPlus size={16}/> Cargar
             </button>
           </div>
 
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
             {listaPersonas.map((p, index) => (
               <div key={index} className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-slate-800 animate-in slide-in-from-left-2">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${p.tripPax === 'T' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
-                  <div className="text-slate-200 font-bold text-xs uppercase">{p.apellidoNombre} ({p.nroDni})</div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${p.tripPax === 'T' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
+                    <div className="text-slate-200 font-bold text-xs uppercase">{p.apellidoNombre} <span className="text-slate-500 font-mono">({p.nroDni})</span></div>
+                  </div>
+                  <div className="flex gap-4 ml-5">
+                    <span className="text-[9px] text-slate-500 uppercase font-bold flex items-center gap-1"><Briefcase size={10}/> Mano: {p.equipajeMano}</span>
+                    <span className="text-[9px] text-slate-500 uppercase font-bold flex items-center gap-1"><Package size={10}/> Bodega: {p.equipajeBodega}</span>
+                  </div>
                 </div>
                 <button type="button" onClick={() => quitarPersona(index)} className="text-slate-600 hover:text-red-500 p-1">
                   <Trash2 size={14}/>
@@ -196,7 +232,7 @@ const FlightForm = ({ onFlightAdded }) => {
           </div>
         </div>
 
-        {/* SECCIÓN 3: OBSERVACIONES (Novedades, Herramientas, Victorinox) */}
+        {/* SECCIÓN 3: OBSERVACIONES */}
         <div className="space-y-2">
           <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest ml-1 flex items-center gap-2">
             <MessageSquare size={14}/> Observaciones y Elementos Controlados
