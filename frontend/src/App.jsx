@@ -124,7 +124,7 @@ function App() {
       {/* FOOTER */}
       <footer className="py-12 text-center">
         <div className="w-20 h-1 bg-slate-800 mx-auto mb-6 rounded-full"></div>
-        <p className="text-slate-600 text-[8px] font-bold uppercase tracking-[0.3em]">
+        <p className="text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em]">
           &copy; {new Date().getFullYear()} PSA - ROLANDO DUARTE • Todos los
           derechos reservados.
         </p>
