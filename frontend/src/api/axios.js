@@ -1,8 +1,9 @@
 import axios from 'axios';
 
-// Creamos una instancia personalizada
+// Usamos la variable de entorno de Vite. 
+// Si no existe (en local), usará el puerto 5000 por defecto.
 const api = axios.create({
-    baseURL: 'http://localhost:5000/api', // La URL de tu servidor Node.js
+    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
 });
 
 export default api;
