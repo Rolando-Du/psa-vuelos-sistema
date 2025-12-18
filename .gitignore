@@ -1,0 +1,24 @@
+# Dependencias (Back y Front)
+node_modules/
+jspm_packages/
+
+# Variables de entorno (Seguridad)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Compilación (React)
+dist/
+build/
+out/
+
+# Logs y Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sistema
+.DS_Store
+Thumbs.db
