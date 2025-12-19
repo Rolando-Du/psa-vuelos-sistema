@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }) => {
         
         setUser(userData);
         // 2. Guardamos en sessionStorage
-        sessionStorage.setItem('user', JSON.stringify(userData)); // CAMBIADO
+        sessionStorage.setItem('user', JSON.stringify(userData)); 
         
         // Configuramos el token en axios para futuras peticiones
         api.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         setUser(null);
         // 3. Limpiamos sessionStorage
-        sessionStorage.removeItem('user'); // CAMBIADO
+        sessionStorage.removeItem('user'); 
         delete api.defaults.headers.common['Authorization'];
     };
 

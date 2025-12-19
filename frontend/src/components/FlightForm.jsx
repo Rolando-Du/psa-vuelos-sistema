@@ -120,7 +120,7 @@ const FlightForm = ({ onFlightAdded }) => {
     }
 
     try {
-      // PREPARACIÓN DE DATOS (Soluciona el Error 400)
+      // PREPARACIÓN DE DATOS 
       const dataFinal = {
         ...formData,
         // Aseguramos que procedencia y destino nunca sean undefined para el backend
@@ -345,7 +345,7 @@ const FlightForm = ({ onFlightAdded }) => {
 
             <div className="flex flex-col gap-1">
               <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
-                Rol
+                TRIP-PAX
               </label>
               <select
                 name="tripPax"

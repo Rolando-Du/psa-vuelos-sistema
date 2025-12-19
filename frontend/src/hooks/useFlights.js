@@ -8,7 +8,6 @@ export const useFlights = (refreshTrigger) => {
     const fetchFlights = useCallback(async () => {
         try {
             setLoading(true);
-            // CORRECCIÓN: Se cambió '/flights' por '/'
             const res = await api.get('/'); 
             setFlights(res.data);
         } catch (error) {

@@ -11,7 +11,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login"; 
 import Register from "./pages/Register"; 
 
-// Hooks y Contexto (IMPORTANTE: Rutas actualizadas)
+// Hooks y Contexto 
 import { useFlights } from "./hooks/useFlights"; 
 import { useAuth } from "./hooks/useAuth";
 import { AuthProvider } from "./context/AuthContext"; 
@@ -125,7 +125,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           
-          {/* RUTA TEMPORAL - Úsala para crear usuario luego borrar */}
+          {/* RUTA TEMPORAL */}
           <Route path="/register-temp-psa" element={<Register />} />
           
           <Route 
