@@ -2,16 +2,16 @@ import React, { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 // Añadimos Eye y EyeOff
-import { Lock, User, Eye, EyeOff } from "lucide-react"; 
+import { Lock, User, Eye, EyeOff } from "lucide-react";
 import logoPSA from "../assets/Logo-PSA.webp";
 import Swal from "sweetalert2";
 
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false); 
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  
+
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -21,24 +21,24 @@ const Login = () => {
 
     try {
       await login(username, password);
-      
+
       const Toast = Swal.mixin({
         toast: true,
-        position: 'top-end',
+        position: "top-end",
         showConfirmButton: false,
         timer: 2000,
         timerProgressBar: true,
-        background: '#0f172a',
-        color: '#fff'
+        background: "#0f172a",
+        color: "#fff",
       });
 
       Toast.fire({
-        icon: 'success',
-        title: 'Acceso Autorizado'
+        icon: "success",
+        title: "Acceso Autorizado",
       });
 
       navigate("/");
-    // eslint-disable-next-line no-unused-vars
+      // eslint-disable-next-line no-unused-vars
     } catch (err) {
       Swal.fire({
         icon: "error",
@@ -46,7 +46,7 @@ const Login = () => {
         text: "Usuario o contraseña incorrectos.",
         background: "#0f172a",
         color: "#fff",
-        confirmButtonColor: "#2563eb"
+        confirmButtonColor: "#2563eb",
       });
     } finally {
       setLoading(false);
@@ -60,7 +60,7 @@ const Login = () => {
           <div className="p-8 text-center border-b border-blue-900/20 bg-slate-900/50">
             <img src={logoPSA} alt="Logo PSA" className="h-16 mx-auto mb-4" />
             <h1 className="text-2xl font-black text-white tracking-[0.2em] uppercase">
-              SKY<span className="text-blue-500">LOG</span>
+              Registro de<span className="text-blue-500">Vuelos</span>
             </h1>
           </div>
 
@@ -88,7 +88,7 @@ const Login = () => {
                 </label>
                 <div className="relative group">
                   <input
-                    type={showPassword ? "text" : "password"} 
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full p-4 bg-slate-950 text-white rounded-xl border border-slate-800 outline-none focus:border-blue-500/50 pr-12"
@@ -96,7 +96,7 @@ const Login = () => {
                     required
                   />
                   <button
-                    type="button" 
+                    type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-blue-500 transition-colors"
                   >
