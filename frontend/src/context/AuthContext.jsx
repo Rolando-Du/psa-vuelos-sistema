@@ -1,16 +1,22 @@
 import React, { createContext, useState } from 'react';
 import api from '../api/axios';
 
-
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
+    // 1. Al iniciar, buscamos en sessionStorage (se borra al cerrar la pestaña)
     const [user, setUser] = useState(() => {
-        const savedUser = localStorage.getItem('user');
+        const savedUser = sessionStorage.getItem('user'); // CAMBIADO
         if (savedUser) {
-            const parsedUser = JSON.parse(savedUser);
-            api.defaults.headers.common['Authorization'] = `Bearer ${parsedUser.token}`;
-            return parsedUser;
+            try {
+                const parsedUser = JSON.parse(savedUser);
+                // Restauramos el token para axios
+                api.defaults.headers.common['Authorization'] = `Bearer ${parsedUser.token}`;
+                return parsedUser;
+            // eslint-disable-next-line no-unused-vars
+            } catch (error) {
+                return null;
+            }
         }
         return null;
     });
@@ -18,8 +24,12 @@ export const AuthProvider = ({ children }) => {
     const login = async (username, password) => {
         const res = await api.post('/auth/login', { username, password });
         const userData = res.data;
+        
         setUser(userData);
-        localStorage.setItem('user', JSON.stringify(userData));
+        // 2. Guardamos en sessionStorage
+        sessionStorage.setItem('user', JSON.stringify(userData)); // CAMBIADO
+        
+        // Configuramos el token en axios para futuras peticiones
         api.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
         return userData;
     };
@@ -31,7 +41,8 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         setUser(null);
-        localStorage.removeItem('user');
+        // 3. Limpiamos sessionStorage
+        sessionStorage.removeItem('user'); // CAMBIADO
         delete api.defaults.headers.common['Authorization'];
     };
 
@@ -42,5 +53,4 @@ export const AuthProvider = ({ children }) => {
     );
 };
 
-// Exportamos el contexto de forma predeterminada para que el hook lo use internamente
 export default AuthContext;
