@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
 import flightRoutes from './routes/flightRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 // Configuración
 dotenv.config();
@@ -17,6 +18,7 @@ app.use(express.json());
 
 // RUTAS ACTUALIZADAS
 // Al usar '/api', las rutas de flightRoutes responderán en la raíz de la API.
+app.use('/api/auth', authRoutes);
 app.use('/api', flightRoutes);
 
 app.get('/', (req, res) => {
