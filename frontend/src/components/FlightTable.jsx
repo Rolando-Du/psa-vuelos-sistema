@@ -12,7 +12,8 @@ import {
   FileText, 
   Table as TableIcon,
   Fingerprint,
-  MessageSquare 
+  MessageSquare,
+  Hash // Importado para el icono de registro
 } from 'lucide-react';
 
 const FlightTable = ({ refreshTrigger }) => {
@@ -62,40 +63,63 @@ const FlightTable = ({ refreshTrigger }) => {
 
     const deleteFlight = async (id) => {
         const result = await Swal.fire({
-            title: '¿Eliminar registro?',
-            text: "Esta acción borrará el vuelo y todos sus pasajeros asociados.",
+            title: '<span style="color: #f1f5f9">¿Eliminar registro?</span>',
+            text: "Esta acción borrará el vuelo y todos sus pasajeros asociados permanentemente.",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#ef4444',
-            confirmButtonText: 'Sí, eliminar',
+            cancelButtonColor: '#334155',
+            confirmButtonText: 'SÍ, ELIMINAR',
+            cancelButtonText: 'CANCELAR',
             background: '#0f172a',
-            color: '#f1f5f9'
+            color: '#94a3b8',
+            iconColor: '#f59e0b',
+            customClass: {
+                popup: 'rounded-2xl border border-slate-800 shadow-2xl',
+                confirmButton: 'rounded-xl font-black px-6 py-3',
+                cancelButton: 'rounded-xl font-black px-6 py-3'
+            }
         });
 
         if (result.isConfirmed) {
             try {
                 await api.delete(`/${id}`);
                 setFlights(prev => prev.filter(f => f._id !== id));
-            // eslint-disable-next-line no-unused-vars
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Eliminado',
+                    text: 'El registro ha sido borrado correctamente.',
+                    timer: 2000,
+                    showConfirmButton: false,
+                    background: '#0f172a',
+                    color: '#f1f5f9'
+                });
             } catch (error) {
-                Swal.fire({ icon: 'error', title: 'Error al eliminar' });
+                console.error("Error al eliminar:", error);
+                Swal.fire({ 
+                    icon: 'error', 
+                    title: 'Error', 
+                    text: 'No se pudo eliminar el registro.',
+                    background: '#0f172a',
+                    color: '#f1f5f9'
+                });
             }
         }
     };
 
-    // Función para obtener el nombre dinámico del archivo
     const getFileName = (extension) => {
         const dateStr = new Date().toLocaleDateString().replace(/\//g, '_');
-        // Si hay una matrícula en el filtro, la usamos, si no usamos "PSA"
-        const namePart = filterMatricula ? filterMatricula.toUpperCase() : "PSA";
+        const namePart = filterMatricula ? filterMatricula.toUpperCase() : "PLANILLA";
         return `Reporte_${namePart}_${dateStr}.${extension}`;
     };
 
+    // ACTUALIZADO: Exportación Excel con Nro Registro
     const exportarExcel = () => {
         const dataParaExcel = [];
         filteredFlights.forEach(f => {
             f.personas?.forEach(p => {
                 dataParaExcel.push({
+                    "CONTROL": f.nroRegistro || "N/A", // Nueva Columna
                     "FECHA": f.fecha,
                     "HORA": f.hora,
                     "MATRÍCULA": f.matricula,
@@ -116,9 +140,11 @@ const FlightTable = ({ refreshTrigger }) => {
         XLSX.writeFile(wb, getFileName('xlsx'));
     };
 
+    // ACTUALIZADO: Exportación PDF con Nro Registro
     const exportarPDF = () => {
         const doc = new jsPDF({ orientation: 'landscape' });
         const tableRows = filteredFlights.map(f => [
+            f.nroRegistro || "N/A", // Nueva Celda
             f.fecha, f.hora, f.matricula, f.tipoMovimiento,
             f.tipoMovimiento === 'ARRIBO' ? f.procedencia : f.destino,
             f.personas?.map(p => `${p.tripPax}: ${p.apellidoNombre}`).join('\n') || '-',
@@ -126,17 +152,18 @@ const FlightTable = ({ refreshTrigger }) => {
             `${f.gradoOficial} ${f.nombreOficial}`
         ]);
         autoTable(doc, {
-            head: [["FECHA", "HORA", "MATRICULA", "MOV.", "ORIGEN/DEST", "TRIP/PAX", "OBSERVACIONES", "OFICIAL"]],
+            head: [["CONTROL", "FECHA", "HORA", "MATRICULA", "MOV.", "ORIGEN/DEST", "TRIP/PAX", "OBSERVACIONES", "OFICIAL"]],
             body: tableRows,
             theme: 'grid',
-            styles: { fontSize: 6 }
+            styles: { fontSize: 6 },
+            headStyles: { fillColor: [30, 41, 59] } // Color Slate 800
         });
         doc.save(getFileName('pdf'));
     };
 
     return (
         <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto p-2">
-            
+            {/* Filtros */}
             <div className="bg-slate-900/40 backdrop-blur-md p-6 border border-slate-800 rounded-2xl shadow-2xl">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                     <div className="w-full">
@@ -179,11 +206,13 @@ const FlightTable = ({ refreshTrigger }) => {
                 )}
             </div>
 
+            {/* Tabla Actualizada con Columna Control */}
             <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-950/40 text-blue-400 text-[10px] uppercase tracking-widest font-black border-b border-slate-800">
+                                <th className="p-5">Control</th> {/* NUEVA COLUMNA */}
                                 <th className="p-5">Fecha / Hora</th>
                                 <th className="p-5">Matrícula</th>
                                 <th className="p-5">Movimiento</th>
@@ -195,11 +224,22 @@ const FlightTable = ({ refreshTrigger }) => {
                         <tbody className="divide-y divide-slate-800/50">
                             {filteredFlights.map((f) => (
                                 <tr key={f._id} className="hover:bg-blue-500/5 transition-all">
+                                    {/* Celda del Número de Registro */}
+                                    <td className="p-5">
+                                        <div className="flex items-center gap-2">
+                                            <div className="bg-blue-500/10 p-1.5 rounded-md">
+                                                <Hash size={12} className="text-blue-500" />
+                                            </div>
+                                            <span className="text-[11px] font-mono font-black text-blue-300 tracking-tighter">
+                                                {f.nroRegistro || "---"}
+                                            </span>
+                                        </div>
+                                    </td>
                                     <td className="p-5 whitespace-nowrap">
                                         <div className="font-bold text-slate-200 text-sm">{f.fecha}</div>
                                         <div className="text-[10px] text-slate-500 font-mono mt-1">{f.hora} HS</div>
                                     </td>
-                                    <td className="p-5 font-black text-blue-400 text-base">{f.matricula}</td>
+                                    <td className="p-5 font-black text-white text-base tracking-tight">{f.matricula}</td>
                                     <td className="p-5">
                                         <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
                                             f.tipoMovimiento === 'ARRIBO' ? 'bg-blue-500/10 text-blue-400' : 'bg-amber-500/10 text-amber-500'
@@ -222,7 +262,11 @@ const FlightTable = ({ refreshTrigger }) => {
                                         </div>
                                     </td>
                                     <td className="p-5 text-center">
-                                        <button onClick={() => deleteFlight(f._id)} className="text-slate-700 hover:text-red-500 transition-colors">
+                                        <button 
+                                            onClick={() => deleteFlight(f._id)} 
+                                            className="text-slate-700 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-red-500/10"
+                                            title="Eliminar Registro"
+                                        >
                                             <Trash2 size={18} />
                                         </button>
                                     </td>
@@ -230,6 +274,11 @@ const FlightTable = ({ refreshTrigger }) => {
                             ))}
                         </tbody>
                     </table>
+                    {filteredFlights.length === 0 && (
+                        <div className="p-20 text-center text-slate-600 uppercase font-black text-xs tracking-widest">
+                            No se encontraron movimientos registrados
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
