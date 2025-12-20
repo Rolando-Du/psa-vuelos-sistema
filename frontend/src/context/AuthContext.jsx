@@ -6,7 +6,7 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
     // 1. Al iniciar, buscamos en sessionStorage (se borra al cerrar la pestaña)
     const [user, setUser] = useState(() => {
-        const savedUser = sessionStorage.getItem('user'); // CAMBIADO
+        const savedUser = sessionStorage.getItem('user'); 
         if (savedUser) {
             try {
                 const parsedUser = JSON.parse(savedUser);

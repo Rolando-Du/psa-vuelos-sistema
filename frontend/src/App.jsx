@@ -55,7 +55,7 @@ function Dashboard() {
             <img src={logoPSA} alt="Logo PSA" className="h-10 w-auto object-contain" />
             <div className="hidden sm:block w-px h-8 bg-blue-900/40"></div>
             <span className="text-xl font-black tracking-[0.15em] uppercase text-white" style={{ fontFamily: "'Orbitron', sans-serif" }}>
-              Registro de<span className="text-blue-500">Vuelos</span>
+              Registro de <span className="text-blue-500"> Vuelos</span>
             </span>
           </div>
 
