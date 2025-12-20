@@ -1,23 +1,40 @@
 import express from 'express';
-import { 
-    getFlights, 
-    createFlight, 
-    updateFlight, 
-    deleteFlight 
+import {
+    getFlights,
+    getFlightsAnulados,
+    createFlight,
+    anularFlight,
+    searchByMatricula // Función para autocompletado por matrícula
 } from '../controllers/flightController.js';
+
+import { protect } from '../middlewares/auth.js';
 
 const router = express.Router();
 
-// Estas rutas ahora responden en: /api/
-// Ejemplo: GET https://skylog-api.onrender.com/api/
-router.route('/')
-    .get(getFlights)   
-    .post(createFlight); 
+/**
+ * RUTAS DE CONSULTA (GET)
+ * Estas rutas obtienen los listados y datos para autocompletado.
+ */
 
-// Estas rutas responden en: /api/:id
-// Ejemplo: DELETE https://skylog-api.onrender.com/api/64f1...
-router.route('/:id')
-    .put(updateFlight)   
-    .delete(deleteFlight); 
+// Obtener vuelos activos (con paginación y filtros)
+router.get('/', getFlights);
+
+// Obtener vuelos anulados (con paginación y filtros)
+router.get('/anulados', getFlightsAnulados);
+
+// Buscar datos históricos de una matrícula (para autocompletar el formulario)
+router.get('/search-matricula/:matricula', searchByMatricula);
+
+
+/**
+ * RUTAS DE ACCIÓN (POST / PATCH)
+ * Estas rutas requieren autenticación (protect) ya que modifican la base de datos.
+ */
+
+// Crear un nuevo registro de vuelo
+router.post('/', protect, createFlight);
+
+// Anular un registro existente (cambia estado a ANULADO y guarda observaciones)
+router.patch('/:id/anular', protect, anularFlight);
 
 export default router;
