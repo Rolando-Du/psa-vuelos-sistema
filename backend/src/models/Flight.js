@@ -50,35 +50,51 @@ const flightSchema = new mongoose.Schema(
   }
 );
 
-/* NORMALIZACIÓN ANTES DE GUARDAR */
-// Eliminamos 'next' para evitar el TypeError en versiones modernas de Mongoose
+/**
+ * NORMALIZACIÓN PARA .save()
+ * Se ejecuta al crear (flight.save() o Flight.create())
+ */
 flightSchema.pre("save", function () {
-  // 1. Limpieza de strings básicos
   this.matricula = (this.matricula || "S/M").toUpperCase().trim();
-  this.nombreOficial = (this.nombreOficial || "S/N").toUpperCase().trim();
-  this.propietario = (this.propietario || "PARTICULAR").toUpperCase().trim();
-
-  // 2. Lógica estricta de Arribo/Partida
+  this.nombreOficial = (this.nombreOficial || "").toUpperCase().trim();
+  
+  // Limpieza de procedencia/destino según movimiento
   if (this.tipoMovimiento === "ARRIBO") {
     this.destino = "N/A";
-    this.procedencia = (this.procedencia && this.procedencia !== "N/A") 
-      ? this.procedencia.toUpperCase().trim() 
-      : "DESCONOCIDO";
   } else {
     this.procedencia = "N/A";
-    this.destino = (this.destino && this.destino !== "N/A") 
-      ? this.destino.toUpperCase().trim() 
-      : "DESCONOCIDO";
   }
 
-  // 3. Normalizar personas
+  // Normalizar array de personas
   if (this.personas && Array.isArray(this.personas)) {
     this.personas.forEach((p) => {
       p.apellidoNombre = (p.apellidoNombre || "SIN NOMBRE").toUpperCase().trim();
-      p.nacionalidad = (p.nacionalidad || "ARG").toUpperCase().trim();
-      p.equipajeMano = Number(p.equipajeMano) || 0;
-      p.equipajeBodega = Number(p.equipajeBodega) || 0;
+      p.nroDni = (p.nroDni || "").toString().trim();
     });
+  }
+  // Al no declarar 'next' en los parámetros, Mongoose no lo busca.
+});
+
+/**
+ * NORMALIZACIÓN PARA ACTUALIZACIONES
+ * Se ejecuta en findOneAndUpdate / findByIdAndUpdate
+ */
+flightSchema.pre("findOneAndUpdate", function () {
+  const update = this.getUpdate();
+  if (!update) return;
+
+  // Si se actualiza la matrícula
+  if (update.matricula) {
+    update.matricula = update.matricula.toUpperCase().trim();
+  }
+
+  // Si se actualizan personas (reemplazo de array)
+  if (update.personas && Array.isArray(update.personas)) {
+    update.personas = update.personas.map(p => ({
+      ...p,
+      apellidoNombre: (p.apellidoNombre || "").toUpperCase().trim(),
+      nroDni: (p.nroDni || "").toString().trim()
+    }));
   }
 });
 
