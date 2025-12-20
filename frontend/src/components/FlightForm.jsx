@@ -54,14 +54,17 @@ const FlightForm = ({ onFlightAdded }) => {
 
   /* ==========================================================
       LÓGICA DE AUTOCOMPLETADO POR MATRÍCULA
-     ========================================================== */
+      ========================================================== */
   useEffect(() => {
     const buscarDatosMatricula = async () => {
-      // Solo busca si tiene una longitud mínima (ej: 3 caracteres)
       if (formData.matricula.length >= 3) {
         setIsSearching(true);
         try {
-          const res = await api.get(`/flights/search-matricula/${formData.matricula}`);
+          // Se obtiene el token para la búsqueda de autocompletado
+          const token = localStorage.getItem('token');
+          const res = await api.get(`/flights/search-matricula/${formData.matricula}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
           
           if (res.data) {
             const lastFlight = res.data;
@@ -71,7 +74,6 @@ const FlightForm = ({ onFlightAdded }) => {
               propietario: lastFlight.propietario || prev.propietario,
             }));
 
-            // Si hay personas registradas en ese último vuelo, sugerir o cargar la última persona (opcional)
             if (lastFlight.personas && lastFlight.personas.length > 0) {
               const p = lastFlight.personas[0];
               setPersonaActual(prev => ({
@@ -86,7 +88,6 @@ const FlightForm = ({ onFlightAdded }) => {
           }
         // eslint-disable-next-line no-unused-vars
         } catch (err) {
-          // No hacemos nada si no encuentra, el usuario sigue llenando manual
           console.log("Nueva matrícula detectada.");
         } finally {
           setIsSearching(false);
@@ -96,7 +97,7 @@ const FlightForm = ({ onFlightAdded }) => {
 
     const timer = setTimeout(() => {
       buscarDatosMatricula();
-    }, 800); // Espera 800ms después de que dejó de escribir
+    }, 800);
 
     return () => clearTimeout(timer);
   }, [formData.matricula]);
@@ -143,7 +144,14 @@ const FlightForm = ({ onFlightAdded }) => {
         destino: formData.tipoMovimiento === "PARTIDA" ? (formData.destino || "DESCONOCIDO") : "N/A",
       };
 
-      const response = await api.post("/flights", payload);
+      // SE SOLUCIONA ERROR 401 AQUÍ: Enviando el token en el POST
+      const token = localStorage.getItem('token');
+      const response = await api.post("/flights", payload, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
       const numeroRegistro = response.data?.nroRegistro;
 
       await Swal.fire({
@@ -163,7 +171,12 @@ const FlightForm = ({ onFlightAdded }) => {
       setPersonaActual(personaInicial);
       if (onFlightAdded) onFlightAdded();
     } catch (err) {
-      Swal.fire("Error", err.response?.data?.message || "Error al guardar", "error");
+      // Manejo específico si el error es de autorización (token vencido)
+      if (err.response?.status === 401) {
+        Swal.fire("Sesión vencida", "Por favor, vuelve a iniciar sesión", "error");
+      } else {
+        Swal.fire("Error", err.response?.data?.message || "Error al guardar", "error");
+      }
     }
   };
 
@@ -191,11 +204,9 @@ const FlightForm = ({ onFlightAdded }) => {
           <Field label="Fecha" required>
             <input type="date" name="fecha" value={formData.fecha} onChange={handleChange} className={inputBase} required />
           </Field>
-
           <Field label="Hora" required>
             <input type="time" name="hora" value={formData.hora} onChange={handleChange} className={inputBase} required />
           </Field>
-
           <Field label="Matrícula" required>
             <div className="relative">
               <input 
@@ -209,15 +220,12 @@ const FlightForm = ({ onFlightAdded }) => {
               {isSearching && <Loader2 className="absolute right-3 top-2.5 animate-spin text-blue-500" size={16} />}
             </div>
           </Field>
-
           <Field label="Tipo de aeronave" required>
             <input name="tipoAeronave" value={formData.tipoAeronave} onChange={handleChange} className={`${inputBase} uppercase`} required />
           </Field>
-
           <Field label="Propietario / Empresa" required>
             <input name="propietario" value={formData.propietario} onChange={handleChange} className={`${inputBase} uppercase`} required />
           </Field>
-
           <Field label={formData.tipoMovimiento === "ARRIBO" ? "Procedencia" : "Destino"} required>
             <input
               name={formData.tipoMovimiento === "ARRIBO" ? "procedencia" : "destino"}
@@ -233,7 +241,6 @@ const FlightForm = ({ onFlightAdded }) => {
           <h3 className="text-blue-400 font-black flex items-center gap-2">
             <Users size={18} /> Manifiesto de Personas
           </h3>
-
           <div className="grid md:grid-cols-6 gap-4">
             <Field label="Documento" required>
               <select name="tipoDni" value={personaActual.tipoDni} onChange={handlePersonaChange} className={selectBase}>
@@ -242,20 +249,16 @@ const FlightForm = ({ onFlightAdded }) => {
                 <option value="EXT">EXTRANJERO</option>
               </select>
             </Field>
-
             <Field label="Número" required>
               <input name="nroDni" value={personaActual.nroDni} onChange={handlePersonaChange} className={inputBase} />
             </Field>
-
             <Field label="Apellido y Nombre" required>
               <input name="apellidoNombre" value={personaActual.apellidoNombre} onChange={handlePersonaChange} className={`${inputBase} md:col-span-2 uppercase`} />
             </Field>
-
             <Field label="Nacionalidad" required>
               <input name="nacionalidad" value={personaActual.nacionalidad} onChange={handlePersonaChange} className={`${inputBase} uppercase`} />
             </Field>
           </div>
-
           <div className="grid md:grid-cols-6 gap-4 items-end">
             <Field label="TRIP / PAX" required>
               <select name="tripPax" value={personaActual.tripPax} onChange={handlePersonaChange} className={selectBase}>
@@ -263,15 +266,12 @@ const FlightForm = ({ onFlightAdded }) => {
                 <option value="P">PASAJERO</option>
               </select>
             </Field>
-
             <Field label="Equipaje mano">
               <input type="number" name="equipajeMano" value={personaActual.equipajeMano} onChange={handlePersonaChange} className={`${inputBase} text-center font-mono`} />
             </Field>
-
             <Field label="Equipaje bodega">
               <input type="number" name="equipajeBodega" value={personaActual.equipajeBodega} onChange={handlePersonaChange} className={`${inputBase} text-center font-mono`} />
             </Field>
-
             <button
               type="button"
               onClick={agregarPersona}
@@ -280,8 +280,6 @@ const FlightForm = ({ onFlightAdded }) => {
               <UserPlus size={16} /> Agregar Persona
             </button>
           </div>
-
-          {/* LISTA DE PERSONAS AGREGADAS */}
           <div className="space-y-2 mt-4">
             {listaPersonas.map((p, i) => (
               <div key={i} className="flex justify-between items-center bg-slate-900 border border-slate-700 p-3 rounded-lg animate-in fade-in slide-in-from-left-2">
