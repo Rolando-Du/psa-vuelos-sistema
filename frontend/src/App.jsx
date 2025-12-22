@@ -22,6 +22,7 @@ import {
   Activity,
   LogOut,
   ChevronDown,
+  Plane,
 } from "lucide-react";
 import logoPSA from "./assets/Logo-PSA.webp";
 
@@ -37,7 +38,6 @@ function Dashboard() {
     setIsTableOpen(true);
   };
 
-  // ✅ LÓGICA DE CONTEO INTEGRADA
   const stats = useMemo(() => {
     if (!flights || !Array.isArray(flights))
       return { total: 0, arribos: 0, partidas: 0 };
@@ -57,9 +57,36 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#020617] font-sans antialiased text-slate-300">
+      {/* ESTILOS PARA LA ANIMACIÓN DEL AVIÓN Y ESTELA BLANCA */}
+      <style>
+        {`
+          @keyframes horizontalFly {
+            0% { transform: translateX(-150px); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateX(250px); opacity: 0; }
+          }
+          .animate-horizontal-fly {
+            animation: horizontalFly 12s linear infinite;
+          }
+          .plane-trail {
+            /* Cambio a color Blanco con degradado */
+            background: linear-gradient(to left, rgba(255, 255, 255, 0.4), transparent);
+            height: 1px;
+            width: 70px;
+            position: absolute;
+            left: -65px;
+            top: 50%;
+            transform: translateY(-50%);
+            filter: blur(1px);
+          }
+        `}
+      </style>
+
       {/* NAVBAR */}
       <nav className="bg-[#0f172a] border-b border-blue-900/30 shadow-2xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          {/* LADO IZQUIERDO: LOGO Y TÍTULOS */}
           <div className="flex items-center gap-4">
             <img
               src={logoPSA}
@@ -67,8 +94,7 @@ function Dashboard() {
               className="h-12 w-auto object-contain"
             />
             <div className="hidden sm:block w-px h-10 bg-blue-900/40"></div>
-            
-            {/* TÍTULO Y SIGLA DEBAJO */}
+
             <div className="flex flex-col justify-center">
               <span
                 className="text-lg sm:text-xl font-black tracking-widest uppercase text-white leading-none"
@@ -76,12 +102,29 @@ function Dashboard() {
               >
                 Registro de<span className="text-blue-500">Vuelos</span>
               </span>
-              <span className="text-[14px] font-bold text-blue-400/60 tracking-[0.5em] uppercase mt-1.5 ml-0.5">
-                UOSP-SMA
+              <span className="text-[10px] font-bold text-blue-400/60 tracking-[0.5em] uppercase mt-1.5 ml-0.5">
+                UOSPSMA
               </span>
             </div>
           </div>
 
+          {/* CENTRO: AVIÓN CON ESTELA BLANCA */}
+          <div className="hidden lg:flex flex-1 justify-center items-center overflow-hidden h-full mx-10 relative">
+            <div className="animate-horizontal-fly relative flex items-center">
+              {/* Estela de color BLANCO */}
+              <div className="plane-trail"></div>
+              {/* Icono de avión claro */}
+              <div className="text-blue-400/30">
+                <Plane
+                  size={28}
+                  strokeWidth={1.5}
+                  style={{ transform: "rotate(43deg)" }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* LADO DERECHO: USUARIO Y LOGOUT */}
           <div className="flex items-center gap-6">
             <div className="hidden md:flex flex-col items-end text-right">
               <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none">
@@ -103,7 +146,6 @@ function Dashboard() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-10">
-        {/* SECCIÓN DE ESTADÍSTICAS */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatsCard
             title="Total Movimientos"
@@ -125,7 +167,6 @@ function Dashboard() {
           />
         </section>
 
-        {/* SECCIÓN DE CARGA */}
         <section className="space-y-6">
           <div className="flex items-center gap-3 ml-1">
             <div className="w-1.5 h-8 bg-blue-600 rounded-full shadow-[0_0_10px_rgba(37,99,235,0.5)]"></div>
@@ -139,7 +180,6 @@ function Dashboard() {
           </div>
         </section>
 
-        {/* SECCIÓN PLANILLA (COLAPSABLE) */}
         <section className="space-y-6">
           <div className="flex items-center justify-between ml-1">
             <div className="flex items-center gap-3">
@@ -152,7 +192,6 @@ function Dashboard() {
                 {flights.length} TOTAL EN BASE
               </span>
             </div>
-
             <button
               onClick={() => setIsTableOpen(!isTableOpen)}
               className="flex items-center gap-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/50 px-5 py-2.5 rounded-xl transition-all shadow-lg active:scale-95 group"
@@ -166,18 +205,16 @@ function Dashboard() {
               >
                 {isTableOpen ? "Ocultar Planilla" : "Desplegar Planilla"}
               </span>
-              <div
+              <ChevronDown
+                size={18}
                 className={`transition-transform duration-500 ${
                   isTableOpen
                     ? "rotate-180 text-blue-400"
                     : "text-slate-500 group-hover:text-blue-400"
                 }`}
-              >
-                <ChevronDown size={18} />
-              </div>
+              />
             </button>
           </div>
-
           <div
             className={`transition-all duration-700 ease-in-out overflow-hidden ${
               isTableOpen
