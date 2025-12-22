@@ -1,295 +1,531 @@
-import React, { useState, useEffect } from "react";
-import { Send, UserPlus, Trash2, Users, Loader2 } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  Send,
+  UserPlus,
+  Trash2,
+  Users,
+  MessageSquare,
+  Briefcase,
+  Package,
+  RefreshCcw,
+} from "lucide-react";
 import api from "../api/axios";
 import Swal from "sweetalert2";
 
-/* ---------- COMPONENTE BASE DE CAMPO ---------- */
-const Field = ({ label, required, children }) => (
-  <div className="flex flex-col gap-1">
-    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-      {label} {required && <span className="text-red-400">*</span>}
-    </label>
-    {children}
-  </div>
-);
+/* ─────────────────────────────────────────────────────────────
+   Helpers de fecha (para que el input date SIEMPRE funcione)
+   - Si te llega "DD/MM/YYYY" lo convierte a "YYYY-MM-DD"
+   - Si ya viene "YYYY-MM-DD" lo deja igual
+───────────────────────────────────────────────────────────── */
+const todayISO = () => new Date().toISOString().split("T")[0];
 
-const inputBase =
-  "w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition";
+const normalizeDateForInput = (value) => {
+  if (!value) return "";
+  // yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  // dd/mm/yyyy
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+    const [d, m, y] = value.split("/");
+    return `${y}-${m}-${d}`;
+  }
+  return value;
+};
 
-const selectBase = inputBase;
-const textareaBase = `${inputBase} min-h-[90px] resize-none`;
+// Lo que mandamos al backend (en ISO)
+const normalizeDateForAPI = (value) => normalizeDateForInput(value);
 
-const FlightForm = ({ onFlightAdded }) => {
-  const today = new Date().toISOString().split("T")[0];
+/* ─────────────────────────────────────────────────────────────
+   Estado inicial
+───────────────────────────────────────────────────────────── */
+const initialState = {
+  fecha: todayISO(),
+  hora: "",
+  matricula: "",
+  tipoAeronave: "",
+  propietario: "",
+  procedencia: "",
+  destino: "",
+  tipoMovimiento: "ARRIBO",
+  gradoOficial: "AYUDANTE",
+  nombreOficial: "",
+  lupOficial: "",
+  observaciones: "",
+};
 
-  const initialState = {
-    fecha: today,
-    hora: "",
-    matricula: "",
-    tipoAeronave: "",
-    propietario: "",
-    procedencia: "",
-    destino: "",
-    tipoMovimiento: "ARRIBO",
-    gradoOficial: "OF. AYUDANTE",
-    nombreOficial: "",
-    lupOficial: "",
-    observaciones: "",
-  };
+const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
+  const [formData, setFormData] = useState(initialState);
+  const [listaPersonas, setListaPersonas] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const personaInicial = {
-    tipoDni: "DNI",
-    nroDni: "",
+  // Autocompletado de personas (histórico)
+  const [historicoPersonas, setHistoricoPersonas] = useState([]);
+
+  const [personaActual, setPersonaActual] = useState({
     apellidoNombre: "",
-    nacionalidad: "ARG",
+    tipoDocumento: "DNI",
+    nroDni: "",
     tripPax: "T",
     equipajeMano: 0,
     equipajeBodega: 0,
-  };
+    nacionalidad: "ARG",
+  });
 
-  const [formData, setFormData] = useState(initialState);
-  const [listaPersonas, setListaPersonas] = useState([]);
-  const [personaActual, setPersonaActual] = useState(personaInicial);
-  const [isSearching, setIsSearching] = useState(false);
+  /* ─────────────────────────────────────────────────────────────
+     Cargar personas previas para autocompletar
+  ───────────────────────────────────────────────────────────── */
+  const cargarPersonas = useCallback(async () => {
+    try {
+      const res = await api.get("/flights");
+      const personas = (res.data || []).flatMap((v) => v.personas || []);
+      setHistoricoPersonas(personas);
+    } catch (error) {
+      console.error("Error al obtener personas para autocompletado", error);
+    }
+  }, []);
 
-  /* ==========================================================
-      LÓGICA DE AUTOCOMPLETADO POR MATRÍCULA
-      ========================================================== */
   useEffect(() => {
-    const buscarDatosMatricula = async () => {
-      if (formData.matricula.length >= 3) {
-        setIsSearching(true);
-        try {
-          // Se obtiene el token para la búsqueda de autocompletado
-          const token = localStorage.getItem('token');
-          const res = await api.get(`/flights/search-matricula/${formData.matricula}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          
-          if (res.data) {
-            const lastFlight = res.data;
-            setFormData(prev => ({
-              ...prev,
-              tipoAeronave: lastFlight.tipoAeronave || prev.tipoAeronave,
-              propietario: lastFlight.propietario || prev.propietario,
-            }));
+    cargarPersonas();
+  }, [onFlightAdded, cargarPersonas]);
 
-            if (lastFlight.personas && lastFlight.personas.length > 0) {
-              const p = lastFlight.personas[0];
-              setPersonaActual(prev => ({
-                ...prev,
-                tipoDni: p.tipoDni || "DNI",
-                nroDni: p.nroDni || "",
-                apellidoNombre: p.apellidoNombre || "",
-                nacionalidad: p.nacionalidad || "ARG",
-                tripPax: p.tripPax || "T"
-              }));
-            }
-          }
-        // eslint-disable-next-line no-unused-vars
-        } catch (err) {
-          console.log("Nueva matrícula detectada.");
-        } finally {
-          setIsSearching(false);
-        }
-      }
-    };
+  /* ─────────────────────────────────────────────────────────────
+     Si hay edición: cargamos el vuelo y NORMALIZAMOS la fecha
+     (Si te viene DD/MM/YYYY, el input date no lo entiende)
+  ───────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (flightToEdit) {
+      setFormData({
+        fecha: normalizeDateForInput(flightToEdit.fecha) || todayISO(),
+        hora: flightToEdit.hora || "",
+        matricula: flightToEdit.matricula || "",
+        tipoAeronave: flightToEdit.tipoAeronave || "",
+        propietario: flightToEdit.propietario || "",
+        procedencia: flightToEdit.procedencia || "",
+        destino: flightToEdit.destino || "",
+        tipoMovimiento: flightToEdit.tipoMovimiento || "ARRIBO",
+        gradoOficial: flightToEdit.gradoOficial || "AYUDANTE",
+        nombreOficial: flightToEdit.nombreOficial || "",
+        lupOficial: flightToEdit.lupOficial || "",
+        observaciones: flightToEdit.observaciones || "",
+      });
+      setListaPersonas(flightToEdit.personas || []);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      setFormData({ ...initialState, fecha: todayISO() });
+      setListaPersonas([]);
+    }
+  }, [flightToEdit]);
 
-    const timer = setTimeout(() => {
-      buscarDatosMatricula();
-    }, 800);
-
-    return () => clearTimeout(timer);
-  }, [formData.matricula]);
-
+  /* ─────────────────────────────────────────────────────────────
+     Inputs del vuelo
+  ───────────────────────────────────────────────────────────── */
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((p) => ({ ...p, [name]: value }));
+
+    if (name === "fecha") {
+      // Aseguramos que SIEMPRE sea YYYY-MM-DD
+      setFormData((prev) => ({ ...prev, fecha: normalizeDateForInput(value) }));
+      return;
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  /* ─────────────────────────────────────────────────────────────
+     Inputs de persona (autocompletado por documento)
+  ───────────────────────────────────────────────────────────── */
   const handlePersonaChange = (e) => {
     const { name, value } = e.target;
-    setPersonaActual((p) => ({
-      ...p,
-      [name]:
-        name === "equipajeMano" || name === "equipajeBodega"
-          ? Number(value) || 0
-          : value,
-    }));
-  };
 
-  const agregarPersona = () => {
-    if (!personaActual.apellidoNombre || !personaActual.nroDni) {
-      return Swal.fire("Atención", "Apellido y documento obligatorios", "warning");
+    if (name === "nroDni") {
+      const encontrada = historicoPersonas.find(
+        (p) => (p.nroDni || "").trim() === value.trim()
+      );
+
+      if (encontrada) {
+        setPersonaActual((prev) => ({
+          ...prev,
+          nroDni: value,
+          apellidoNombre: encontrada.apellidoNombre || "",
+          nacionalidad: encontrada.nacionalidad || "ARG",
+          tipoDocumento: encontrada.tipoDocumento || encontrada.tipoDocumento || "DNI",
+        }));
+        return;
+      }
     }
-    setListaPersonas((p) => [...p, personaActual]);
-    setPersonaActual(personaInicial);
+
+    const finalValue = name.includes("equipaje")
+      ? parseInt(value, 10) || 0
+      : value;
+
+    setPersonaActual((prev) => ({ ...prev, [name]: finalValue }));
   };
 
-  const quitarPersona = (i) => {
-    setListaPersonas((p) => p.filter((_, idx) => idx !== i));
+  /* ─────────────────────────────────────────────────────────────
+     Agregar persona al manifiesto
+  ───────────────────────────────────────────────────────────── */
+  const agregarPersonaALista = () => {
+    if (!personaActual.apellidoNombre || !personaActual.nroDni) {
+      return Swal.fire("Atención", "Nombre y Documento obligatorios", "warning");
+    }
+
+    setListaPersonas((prev) => [...prev, { ...personaActual }]);
+
+    setPersonaActual({
+      apellidoNombre: "",
+      tipoDocumento: "DNI",
+      nroDni: "",
+      tripPax: "T",
+      equipajeMano: 0,
+      equipajeBodega: 0,
+      nacionalidad: "ARG",
+    });
   };
 
+  /* ─────────────────────────────────────────────────────────────
+     Submit: normaliza TODO antes de enviar
+     (uppercase / trim / fecha ISO / números)
+  ───────────────────────────────────────────────────────────── */
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (listaPersonas.length === 0) {
-      return Swal.fire("Error", "Debe cargar al menos una persona", "error");
+      return Swal.fire("Error", "El manifiesto no puede estar vacío", "error");
     }
 
+    setIsSubmitting(true);
+
     try {
-      const payload = {
+      const dataFinal = {
         ...formData,
-        personas: listaPersonas,
-        procedencia: formData.tipoMovimiento === "ARRIBO" ? (formData.procedencia || "DESCONOCIDO") : "N/A",
-        destino: formData.tipoMovimiento === "PARTIDA" ? (formData.destino || "DESCONOCIDO") : "N/A",
+        fecha: normalizeDateForAPI(formData.fecha),
+        hora: (formData.hora || "").trim(),
+        matricula: (formData.matricula || "").toUpperCase().trim(),
+        tipoAeronave: (formData.tipoAeronave || "").toUpperCase().trim(),
+        propietario: (formData.propietario || "").toUpperCase().trim(),
+        procedencia: (formData.procedencia || "").toUpperCase().trim(),
+        destino: (formData.destino || "").toUpperCase().trim(),
+        tipoMovimiento: (formData.tipoMovimiento || "ARRIBO").toUpperCase().trim(),
+        gradoOficial: (formData.gradoOficial || "").toUpperCase().trim(),
+        nombreOficial: (formData.nombreOficial || "").toUpperCase().trim(),
+        lupOficial: (formData.lupOficial || "").toUpperCase().trim(),
+        observaciones: (formData.observaciones || "").toUpperCase().trim(),
+        personas: listaPersonas.map((p) => ({
+          ...p,
+          apellidoNombre: (p.apellidoNombre || "").toUpperCase().trim(),
+          tipoDocumento: (p.tipoDocumento || "DNI").toUpperCase().trim(),
+          nroDni: (p.nroDni || "").trim(),
+          tripPax: (p.tripPax || "T").toUpperCase().trim(),
+          nacionalidad: (p.nacionalidad || "ARG").toUpperCase().trim(),
+          equipajeMano: Number(p.equipajeMano || 0),
+          equipajeBodega: Number(p.equipajeBodega || 0),
+        })),
       };
 
-      // SE SOLUCIONA ERROR 401 AQUÍ: Enviando el token en el POST
-      const token = localStorage.getItem('token');
-      const response = await api.post("/flights", payload, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      if (flightToEdit) {
+        //  ACTUALIZACIÓN
+        await api.put(`/flights/${flightToEdit._id}`, dataFinal);
 
-      const numeroRegistro = response.data?.nroRegistro;
+        Swal.fire({
+          icon: "success",
+          title: "Actualizado",
+          text: `Registro ${flightToEdit.nroRegistro} guardado.`,
+          background: "#0f172a",
+          color: "#fff",
+        });
 
-      await Swal.fire({
-        icon: "success",
-        title: "Registro guardado correctamente",
-        html: `
-          <div class="mt-2 p-3 bg-slate-100 rounded-lg border border-blue-200 text-center">
-            <p class="text-sm text-slate-600">Número de Folio:</p>
-            <strong class="text-xl text-blue-600">${numeroRegistro}</strong>
-          </div>
-        `,
-        confirmButtonColor: "#2563eb"
-      });
-
-      setFormData(initialState);
-      setListaPersonas([]);
-      setPersonaActual(personaInicial);
-      if (onFlightAdded) onFlightAdded();
-    } catch (err) {
-      // Manejo específico si el error es de autorización (token vencido)
-      if (err.response?.status === 401) {
-        Swal.fire("Sesión vencida", "Por favor, vuelve a iniciar sesión", "error");
+        clearEdit?.();
       } else {
-        Swal.fire("Error", err.response?.data?.message || "Error al guardar", "error");
+        //  CREACIÓN
+        const res = await api.post("/flights", dataFinal);
+        const nroAsignado = res.data?.nroRegistro;
+
+        Swal.fire({
+          icon: "success",
+          title: "Registro Exitoso",
+          html: `<div class="text-lg">Asignado:<br/><b class="text-blue-400 text-2xl">${
+            nroAsignado || "-"
+          }</b></div>`,
+          background: "#0f172a",
+          color: "#fff",
+        });
       }
+
+      onFlightAdded?.();
+      setFormData({ ...initialState, fecha: todayISO() });
+      setListaPersonas([]);
+    } catch (err) {
+      Swal.fire({
+        icon: "error",
+        title: "Error de Servidor",
+        text: err.response?.data?.message || "No se pudo conectar con el servidor",
+        background: "#0f172a",
+        color: "#fff",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-      <div className="flex">
-        {["ARRIBO", "PARTIDA"].map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setFormData({ ...formData, tipoMovimiento: t })}
-            className={`flex-1 py-4 font-black tracking-widest transition ${
-              formData.tipoMovimiento === t
-                ? t === "ARRIBO" ? "bg-blue-600 text-white" : "bg-amber-600 text-white"
-                : "bg-slate-950 text-slate-500"
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      <form onSubmit={handleSubmit} className="p-8 space-y-10">
-        <div className="grid md:grid-cols-3 gap-5">
-          <Field label="Fecha" required>
-            <input type="date" name="fecha" value={formData.fecha} onChange={handleChange} className={inputBase} required />
-          </Field>
-          <Field label="Hora" required>
-            <input type="time" name="hora" value={formData.hora} onChange={handleChange} className={inputBase} required />
-          </Field>
-          <Field label="Matrícula" required>
-            <div className="relative">
-              <input 
-                name="matricula" 
-                value={formData.matricula} 
-                onChange={handleChange} 
-                className={`${inputBase} uppercase pr-10`} 
-                placeholder="LV-XXX" 
-                required 
-              />
-              {isSearching && <Loader2 className="absolute right-3 top-2.5 animate-spin text-blue-500" size={16} />}
-            </div>
-          </Field>
-          <Field label="Tipo de aeronave" required>
-            <input name="tipoAeronave" value={formData.tipoAeronave} onChange={handleChange} className={`${inputBase} uppercase`} required />
-          </Field>
-          <Field label="Propietario / Empresa" required>
-            <input name="propietario" value={formData.propietario} onChange={handleChange} className={`${inputBase} uppercase`} required />
-          </Field>
-          <Field label={formData.tipoMovimiento === "ARRIBO" ? "Procedencia" : "Destino"} required>
-            <input
-              name={formData.tipoMovimiento === "ARRIBO" ? "procedencia" : "destino"}
-              value={formData.tipoMovimiento === "ARRIBO" ? formData.procedencia : formData.destino}
-              onChange={handleChange}
-              className={`${inputBase} uppercase`}
-              required
-            />
-          </Field>
-        </div>
-
-        <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-5">
-          <h3 className="text-blue-400 font-black flex items-center gap-2">
-            <Users size={18} /> Manifiesto de Personas
-          </h3>
-          <div className="grid md:grid-cols-6 gap-4">
-            <Field label="Documento" required>
-              <select name="tipoDni" value={personaActual.tipoDni} onChange={handlePersonaChange} className={selectBase}>
-                <option value="DNI">DNI</option>
-                <option value="PAS">PASAPORTE</option>
-                <option value="EXT">EXTRANJERO</option>
-              </select>
-            </Field>
-            <Field label="Número" required>
-              <input name="nroDni" value={personaActual.nroDni} onChange={handlePersonaChange} className={inputBase} />
-            </Field>
-            <Field label="Apellido y Nombre" required>
-              <input name="apellidoNombre" value={personaActual.apellidoNombre} onChange={handlePersonaChange} className={`${inputBase} md:col-span-2 uppercase`} />
-            </Field>
-            <Field label="Nacionalidad" required>
-              <input name="nacionalidad" value={personaActual.nacionalidad} onChange={handlePersonaChange} className={`${inputBase} uppercase`} />
-            </Field>
-          </div>
-          <div className="grid md:grid-cols-6 gap-4 items-end">
-            <Field label="TRIP / PAX" required>
-              <select name="tripPax" value={personaActual.tripPax} onChange={handlePersonaChange} className={selectBase}>
-                <option value="T">TRIPULANTE</option>
-                <option value="P">PASAJERO</option>
-              </select>
-            </Field>
-            <Field label="Equipaje mano">
-              <input type="number" name="equipajeMano" value={personaActual.equipajeMano} onChange={handlePersonaChange} className={`${inputBase} text-center font-mono`} />
-            </Field>
-            <Field label="Equipaje bodega">
-              <input type="number" name="equipajeBodega" value={personaActual.equipajeBodega} onChange={handlePersonaChange} className={`${inputBase} text-center font-mono`} />
-            </Field>
+    <div className="bg-slate-900 rounded-2xl border border-blue-900/20 shadow-2xl overflow-hidden text-slate-200">
+      {/* Selector de Movimiento */}
+      <div className="flex border-b border-slate-800">
+        {!flightToEdit ? (
+          <>
             <button
               type="button"
-              onClick={agregarPersona}
-              className="md:col-span-3 h-11 bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center gap-2 font-black uppercase tracking-widest shadow-lg shadow-blue-900/40 transition"
+              onClick={() =>
+                setFormData({ ...formData, tipoMovimiento: "ARRIBO" })
+              }
+              className={`flex-1 py-4 font-black tracking-widest transition-all ${
+                formData.tipoMovimiento === "ARRIBO"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-900 text-slate-500 hover:text-slate-300"
+              }`}
             >
-              <UserPlus size={16} /> Agregar Persona
+              ARRIBOS
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setFormData({ ...formData, tipoMovimiento: "PARTIDA" })
+              }
+              className={`flex-1 py-4 font-black tracking-widest transition-all ${
+                formData.tipoMovimiento === "PARTIDA"
+                  ? "bg-amber-600 text-white"
+                  : "bg-slate-900 text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              PARTIDAS
+            </button>
+          </>
+        ) : (
+          <div className="flex-1 py-4 bg-indigo-900/40 flex justify-between items-center px-8 border-b-2 border-indigo-500">
+            <h2 className="font-black tracking-widest text-indigo-400 flex items-center gap-3">
+              <RefreshCcw
+                size={20}
+                className={isSubmitting ? "animate-spin" : ""}
+              />
+              EDITANDO: {flightToEdit.nroRegistro}
+            </h2>
+            <button
+              type="button"
+              onClick={clearEdit}
+              className="text-xs bg-red-500/20 text-red-500 px-4 py-1 rounded-full border border-red-500/50 font-bold"
+            >
+              CANCELAR
             </button>
           </div>
-          <div className="space-y-2 mt-4">
-            {listaPersonas.map((p, i) => (
-              <div key={i} className="flex justify-between items-center bg-slate-900 border border-slate-700 p-3 rounded-lg animate-in fade-in slide-in-from-left-2">
-                <div className="flex gap-4 items-center">
-                   <span className="text-[10px] bg-slate-700 px-2 py-0.5 rounded text-blue-300 font-bold">{p.tripPax === "T" ? "TRIP" : "PAX"}</span>
-                   <span className="text-sm text-slate-200 uppercase">
-                    {p.apellidoNombre} <span className="text-slate-500 ml-2">({p.tipoDni}: {p.nroDni})</span>
-                  </span>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-8 space-y-8">
+        {/* Fila 1: Fecha, Hora, Matrícula */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-1">
+            <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">
+              Fecha
+            </label>
+            <input
+              type="date"
+              name="fecha"
+              value={formData.fecha}
+              onChange={handleChange}
+              className="w-full p-3 bg-slate-800 text-white rounded-lg border border-slate-700 outline-none focus:border-blue-500"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">
+              Hora
+            </label>
+            <input
+              type="time"
+              name="hora"
+              value={formData.hora}
+              onChange={handleChange}
+              className="w-full p-3 bg-slate-800 text-white rounded-lg border border-slate-700 outline-none focus:border-blue-500"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">
+              Matrícula
+            </label>
+            <input
+              type="text"
+              name="matricula"
+              placeholder="LV-XXX"
+              value={formData.matricula}
+              onChange={handleChange}
+              className="w-full p-3 bg-slate-800 text-blue-400 font-black rounded-lg border border-slate-700 uppercase outline-none focus:ring-1 focus:ring-blue-500"
+              required
+            />
+          </div>
+        </div>
+
+        {/* Fila 2: Aeronave, Propietario, Ruta */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <input
+            type="text"
+            name="tipoAeronave"
+            placeholder="TIPO AERONAVE"
+            value={formData.tipoAeronave}
+            onChange={handleChange}
+            className="p-3 bg-slate-800 text-white rounded-lg border border-slate-700 uppercase outline-none"
+            required
+          />
+          <input
+            type="text"
+            name="propietario"
+            placeholder="PROPIETARIO / EMPRESA"
+            value={formData.propietario}
+            onChange={handleChange}
+            className="p-3 bg-slate-800 text-white rounded-lg border border-slate-700 uppercase outline-none"
+          />
+          <input
+            type="text"
+            name={formData.tipoMovimiento === "ARRIBO" ? "procedencia" : "destino"}
+            placeholder={formData.tipoMovimiento === "ARRIBO" ? "PROCEDENCIA" : "DESTINO"}
+            value={formData.tipoMovimiento === "ARRIBO" ? formData.procedencia : formData.destino}
+            onChange={handleChange}
+            className="p-3 bg-slate-800 text-white rounded-lg border border-blue-500/30 uppercase outline-none"
+            required
+          />
+        </div>
+
+        {/* Sección de Manifiesto */}
+        <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-6">
+          <h3 className="text-blue-400 font-black text-sm uppercase tracking-widest flex items-center gap-2">
+            <Users size={18} /> Manifiesto de Personas
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="md:col-span-2">
+              <select
+                name="tipoDocumento"
+                value={personaActual.tipoDocumento}
+                onChange={handlePersonaChange}
+                className="w-full p-3 bg-slate-900 text-white rounded-lg border border-slate-700 outline-none text-xs font-bold"
+              >
+                <option value="DNI">DNI</option>
+                <option value="PASAPORTE">PASAPORTE</option>
+                <option value="CEDULA">CÉDULA</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-3">
+              <input
+                type="text"
+                name="nroDni"
+                placeholder="NRO DOC"
+                value={personaActual.nroDni}
+                onChange={handlePersonaChange}
+                className="w-full p-3 bg-slate-900 text-white rounded-lg border border-slate-700 font-mono outline-none text-sm"
+              />
+            </div>
+
+            <div className="md:col-span-5">
+              <input
+                type="text"
+                name="apellidoNombre"
+                placeholder="APELLIDO Y NOMBRE"
+                value={personaActual.apellidoNombre}
+                onChange={handlePersonaChange}
+                className="w-full p-3 bg-slate-900 text-white rounded-lg border border-slate-700 uppercase outline-none text-sm"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <input
+                type="text"
+                name="nacionalidad"
+                placeholder="ARG"
+                value={personaActual.nacionalidad}
+                onChange={handlePersonaChange}
+                className="w-full p-3 bg-slate-900 text-white rounded-lg border border-slate-700 uppercase outline-none text-sm text-center font-bold"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+            <div className="md:col-span-3">
+              <label className="text-[9px] text-amber-500 font-bold uppercase ml-1 flex gap-2 items-center">
+                <Briefcase size={12} /> Mano (Kg)
+              </label>
+              <input
+                type="number"
+                name="equipajeMano"
+                value={personaActual.equipajeMano}
+                onChange={handlePersonaChange}
+                className="w-full p-3 bg-slate-900 text-amber-500 rounded-lg border border-slate-700 outline-none text-sm font-bold"
+              />
+            </div>
+
+            <div className="md:col-span-3">
+              <label className="text-[9px] text-blue-400 font-bold uppercase ml-1 flex gap-2 items-center">
+                <Package size={12} /> Bodega (Kg)
+              </label>
+              <input
+                type="number"
+                name="equipajeBodega"
+                value={personaActual.equipajeBodega}
+                onChange={handlePersonaChange}
+                className="w-full p-3 bg-slate-900 text-blue-400 rounded-lg border border-slate-700 outline-none text-sm font-bold"
+              />
+            </div>
+
+            <div className="md:col-span-3">
+              <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
+                Rol
+              </label>
+              <select
+                name="tripPax"
+                value={personaActual.tripPax}
+                onChange={handlePersonaChange}
+                className="w-full p-3 bg-slate-900 text-blue-400 font-bold rounded-lg border border-slate-700 outline-none text-sm"
+              >
+                <option value="T">TRIPULACIÓN</option>
+                <option value="P">PASAJERO</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-3">
+              <button
+                type="button"
+                onClick={agregarPersonaALista}
+                className="w-full h-11.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center gap-2 font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/20"
+              >
+                <UserPlus size={18} /> Agregar
+              </button>
+            </div>
+          </div>
+
+          {/* Listado de personas agregadas */}
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {listaPersonas.map((p, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-800"
+              >
+                <div>
+                  <div className="text-slate-200 font-bold text-xs uppercase">
+                    {p.apellidoNombre}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    {p.nacionalidad} — {p.nroDni} ({p.tripPax})
+                  </div>
                 </div>
-                <button type="button" onClick={() => quitarPersona(i)} className="p-1 hover:bg-red-500/20 rounded transition text-red-500">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setListaPersonas((prev) =>
+                      prev.filter((_, i) => i !== index)
+                    )
+                  }
+                  className="text-slate-600 hover:text-red-500 p-2"
+                >
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -297,34 +533,95 @@ const FlightForm = ({ onFlightAdded }) => {
           </div>
         </div>
 
-        <Field label="Observaciones">
-          <textarea name="observaciones" value={formData.observaciones} onChange={handleChange} className={textareaBase} />
-        </Field>
+        {/* Observaciones */}
+        <div className="space-y-2">
+          <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest ml-1 flex items-center gap-2">
+            <MessageSquare size={14} /> Observaciones
+          </label>
+          <textarea
+            name="observaciones"
+            value={formData.observaciones}
+            onChange={handleChange}
+            className="w-full p-4 bg-slate-950 text-slate-200 rounded-xl border border-slate-800 focus:border-blue-500/50 outline-none min-h-24 resize-none uppercase text-sm font-medium"
+          />
+        </div>
 
-        <div className="grid md:grid-cols-3 gap-5">
-          <Field label="Jerarquía Oficial" required>
-            <select name="gradoOficial" value={formData.gradoOficial} onChange={handleChange} className={selectBase}>
-              <option value="OF. AYUDANTE">OF. AYUDANTE</option>
-              <option value="OF. PRINCIPAL">OF. PRINCIPAL</option>
-              <option value="OF. MAYOR">OF. MAYOR</option>
-              <option value="OF. JEFE">OF. JEFE</option>
+        {/* Firma del Oficial */}
+        <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-1">
+            <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
+              Grado
+            </label>
+            <select
+              name="gradoOficial"
+              value={formData.gradoOficial}
+              onChange={handleChange}
+              className="w-full p-3 bg-slate-900 text-white border border-slate-700 rounded-lg font-bold outline-none text-sm"
+            >
+              <option value="AYUDANTE">AYUDANTE</option>
+              <option value="PRINCIPAL">PRINCIPAL</option>
+              <option value="MAYOR">MAYOR</option>
+              <option value="JEFE">JEFE</option>
               <option value="SUBINSPECTOR">SUBINSPECTOR</option>
               <option value="INSPECTOR">INSPECTOR</option>
             </select>
-          </Field>
-          <Field label="Nombre del oficial" required>
-            <input name="nombreOficial" value={formData.nombreOficial} onChange={handleChange} className={`${inputBase} uppercase`} required />
-          </Field>
-          <Field label="LUP" required>
-            <input name="lupOficial" value={formData.lupOficial} onChange={handleChange} className={inputBase} required />
-          </Field>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
+              Firma Oficial
+            </label>
+            <input
+              type="text"
+              name="nombreOficial"
+              value={formData.nombreOficial}
+              onChange={handleChange}
+              className="w-full p-3 bg-slate-900 text-white border border-slate-700 rounded-lg uppercase outline-none text-sm"
+              required
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
+              L.U.P.
+            </label>
+            <input
+              type="text"
+              name="lupOficial"
+              value={formData.lupOficial}
+              onChange={handleChange}
+              className="w-full p-3 bg-slate-900 text-white border border-slate-700 rounded-lg outline-none text-sm"
+              required
+            />
+          </div>
         </div>
 
+        {/* Botón Submit */}
         <button
           type="submit"
-          className="w-full py-5 bg-blue-600 hover:bg-blue-500 text-white font-black text-lg rounded-xl shadow-2xl shadow-blue-900/50 tracking-widest transition-all active:scale-[0.98]"
+          disabled={isSubmitting}
+          className={`w-full py-5 rounded-xl font-black text-white transition-all shadow-2xl flex items-center justify-center gap-3 text-lg tracking-widest ${
+            isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+          } ${
+            flightToEdit
+              ? "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/40"
+              : formData.tipoMovimiento === "ARRIBO"
+              ? "bg-blue-600 hover:bg-blue-500"
+              : "bg-amber-600 hover:bg-amber-500"
+          }`}
         >
-          <Send size={18} className="inline mr-2" /> FINALIZAR REGISTRO
+          {isSubmitting ? (
+            <RefreshCcw className="animate-spin" size={24} />
+          ) : flightToEdit ? (
+            <RefreshCcw size={24} />
+          ) : (
+            <Send size={24} />
+          )}
+          {isSubmitting
+            ? "PROCESANDO..."
+            : flightToEdit
+            ? "ACTUALIZAR REGISTRO"
+            : "FINALIZAR REGISTRO"}
         </button>
       </form>
     </div>

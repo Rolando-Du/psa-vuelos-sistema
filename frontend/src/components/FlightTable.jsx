@@ -1,353 +1,320 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import api from "../api/axios";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 import Swal from "sweetalert2";
 import {
-  Trash2,
+  Edit3,
+  Ban,
   Search,
-  FilterX,
   Users,
-  Hash,
-  MessageSquare,
-  Fingerprint,
-  Calendar,
-  FileSpreadsheet,
   FileText,
+  Table as TableIcon,
+  MessageSquare,
+  Plane,
+  UserCheck,
+  ChevronLeft,
+  ChevronRight,
   Download,
-  Pencil,
-  X,
+  Hash,
 } from "lucide-react";
 
-const FlightTable = ({ refreshTrigger }) => {
+const FlightTable = ({ refreshTrigger, onEdit }) => {
   const [flights, setFlights] = useState([]);
-  const [page, setPage] = useState(1);
-  const [pages, setPages] = useState(1);
-  const [limit, setLimit] = useState(25);
-  const [total, setTotal] = useState(0);
-
-  // Estados para filtros
   const [filterMatricula, setFilterMatricula] = useState("");
   const [filterPersona, setFilterPersona] = useState("");
   const [filterFecha, setFilterFecha] = useState("");
 
-  // Estados para edición
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedFlight, setSelectedFlight] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10;
 
   useEffect(() => {
+    let isMounted = true;
     const fetchFlights = async () => {
       try {
-        const res = await api.get("/flights", {
-          params: {
-            page,
-            limit,
-            matricula: filterMatricula,
-            persona: filterPersona,
-            fecha: filterFecha,
-          },
-        });
-        setFlights(res.data.flights);
-        setPages(res.data.pages);
-        setTotal(res.data.total);
-      } catch (err) {
-        console.error("Error al obtener vuelos", err);
+        const res = await api.get("/flights");
+        if (isMounted) setFlights(res.data);
+      } catch (error) {
+        console.error("Error al obtener vuelos:", error);
       }
     };
+    fetchFlights();
+    return () => { isMounted = false; };
+  }, [refreshTrigger]);
 
-    const timer = setTimeout(fetchFlights, 400);
-    return () => clearTimeout(timer);
-  }, [page, limit, refreshTrigger, filterMatricula, filterPersona, filterFecha]);
+  const filteredFlights = useMemo(() => {
+    const mat = filterMatricula.trim().toLowerCase();
+    const per = filterPersona.trim().toLowerCase();
 
-  // Función para actualizar vuelo
-  const handleUpdateFlight = async (e) => {
-    e.preventDefault();
-    try {
-      Swal.fire({
-        title: "Actualizando...",
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
+    return flights.filter((f) => {
+      const fMat = (f.matricula || "").toLowerCase();
+      const fReg = (f.nroRegistro || "").toLowerCase();
+      const matchMatricula = fMat.includes(mat) || fReg.includes(mat);
 
-      const { data } = await api.put(`/flights/${selectedFlight._id}`, {
-        matricula: selectedFlight.matricula,
-        tipoMovimiento: selectedFlight.tipoMovimiento,
-        observaciones: selectedFlight.observaciones,
-        personas: selectedFlight.personas,
-      });
+      const matchPersona =
+        per === "" ||
+        (Array.isArray(f.personas) &&
+          f.personas.some((p) => (p.apellidoNombre || "").toLowerCase().includes(per)));
 
-      setFlights((prev) =>
-        prev.map((f) => (f._id === selectedFlight._id ? data : f))
-      );
-      setIsEditModalOpen(false);
-      Swal.fire("Éxito", "Registro actualizado correctamente", "success");
-    } catch (err) {
-      console.error(err);
-      Swal.fire("Error", "No se pudo actualizar el registro", "error");
-    }
-  };
+      let matchFecha = true;
+      if (filterFecha) matchFecha = f.fecha === filterFecha;
 
-  // Descargar vuelo individual en PDF
-  const downloadSingleFlight = async (flight) => {
-    try {
-      Swal.fire({
-        title: "Generando PDF",
-        text: "Preparando manifiesto individual...",
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
-
-      const response = await api.get(
-        `/flights/export/single/${flight._id}/pdf`,
-        { responseType: "blob" }
-      );
-
-      const blob = new Blob([response.data], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      const fechaLimpia = flight.fecha.replace(/\//g, "-");
-      const fileName = `${flight.matricula.toUpperCase()}_${flight.tipoMovimiento}_${fechaLimpia}.pdf`;
-      link.setAttribute("download", fileName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      Swal.close();
-    // eslint-disable-next-line no-unused-vars
-    } catch (err) {
-      Swal.fire("Error", "No se pudo generar el PDF", "error");
-    }
-  };
-
-  // Descargar reporte general
-  const downloadReport = async (format) => {
-    try {
-      Swal.fire({
-        title: "Generando archivo",
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
-
-      const response = await api.get(`/flights/export/${format}`, {
-        params: { matricula: filterMatricula, persona: filterPersona, fecha: filterFecha },
-        responseType: "blob",
-      });
-
-      const mimeType =
-        format === "excel"
-          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          : "application/pdf";
-      const blob = new Blob([response.data], { type: mimeType });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      const extension = format === "excel" ? "xlsx" : "pdf";
-      const hoy = new Date().toISOString().split("T")[0];
-      const fileName = filterMatricula
-        ? `Reporte_${filterMatricula.toUpperCase()}_${hoy}.${extension}`
-        : `Reporte_General_Skylog_${hoy}.${extension}`;
-      link.setAttribute("download", fileName);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      Swal.close();
-    // eslint-disable-next-line no-unused-vars
-    } catch (err) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "No se pudo generar el reporte.",
-      });
-    }
-  };
-
-  const handleFilterChange = (setter, value) => {
-    setter(value);
-    setPage(1);
-  };
-
-  const cleanFilters = () => {
-    setFilterMatricula("");
-    setFilterPersona("");
-    setFilterFecha("");
-    setPage(1);
-  };
-
-  const anularRegistro = async (id) => {
-    const { value: observaciones } = await Swal.fire({
-      title: "Anular registro",
-      input: "textarea",
-      inputPlaceholder: "Motivo de la anulación...",
-      showCancelButton: true,
-      confirmButtonText: "ANULAR",
-      background: "#0f172a",
-      color: "#f1f5f9",
-      confirmButtonColor: "#ef4444",
+      return matchMatricula && matchPersona && matchFecha;
     });
-    if (!observaciones) return;
-    try {
-      await api.patch(`/flights/${id}/anular`, { observaciones });
-      setFlights((prev) =>
-        prev.map((f) => (f._id === id ? { ...f, estado: "ANULADO" } : f))
-      );
-      Swal.fire("Anulado", "El registro ha sido anulado", "success");
-    } catch {
-      Swal.fire("Error", "No se pudo anular", "error");
+  }, [flights, filterMatricula, filterPersona, filterFecha]);
+
+  const totalPages = Math.ceil(filteredFlights.length / rowsPerPage) || 1;
+  const indexOfLastItem = currentPage * rowsPerPage;
+  const indexOfFirstItem = indexOfLastItem - rowsPerPage;
+  const currentItems = filteredFlights.slice(indexOfFirstItem, indexOfLastItem);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterMatricula, filterPersona, filterFecha]);
+
+  const stats = useMemo(() => {
+    let totalPax = 0;
+    let totalTrip = 0;
+    filteredFlights.forEach((f) => {
+      if (f.estado !== "ANULADO") {
+        f.personas?.forEach((p) => {
+          if (p.tripPax === "T") totalTrip++;
+          else totalPax++;
+        });
+      }
+    });
+    return { totalPax, totalTrip, totalVuelos: filteredFlights.length };
+  }, [filteredFlights]);
+
+  const descargarVueloUnicoPDF = (f) => {
+    const doc = new jsPDF({ orientation: "landscape" });
+    const tableRows = (f.personas || []).map((p) => [
+      f.nroRegistro || "-",
+      f.estado === "ANULADO" ? `${f.fecha} (ANULADO)` : f.fecha,
+      f.hora,
+      f.matricula,
+      f.tipoMovimiento,
+      f.tipoMovimiento === "ARRIBO" ? f.procedencia : f.destino,
+      p.tripPax === "T" ? "TRIP" : "PAX",
+      p.apellidoNombre,
+      p.nacionalidad || "ARG",
+      p.tipoDocumento || "DNI",
+      p.nroDni,
+      f.observaciones || "-",
+      `${f.gradoOficial} ${f.nombreOficial}`,
+    ]);
+
+    autoTable(doc, {
+      head: [["Nº REG", "FECHA", "HORA", "MATRÍCULA", "MOV.", "ORIG/DEST", "TIPO", "NOMBRE", "NAC.", "DOC", "NÚMERO", "OBS.", "OFICIAL"]],
+      body: tableRows,
+      theme: "grid",
+      styles: { fontSize: 6, cellPadding: 1.2 },
+      headStyles: { fillColor: [15, 23, 42] },
+    });
+    doc.save(`Vuelo_${f.nroRegistro || f.matricula}_${f.fecha}.pdf`);
+  };
+
+  const anularVuelo = async (id) => {
+    const result = await Swal.fire({
+      title: '<span style="color: #f1f5f9">¿Anular registro?</span>',
+      text: "El registro permanecerá en la base de datos pero se marcará como INVÁLIDO.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#f59e0b",
+      cancelButtonColor: "#334155",
+      confirmButtonText: "SÍ, ANULAR",
+      cancelButtonText: "CANCELAR",
+      background: "#0f172a",
+      color: "#94a3b8",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await api.put(`/flights/${id}`, { estado: "ANULADO" });
+        setFlights((prev) => prev.map((f) => (f._id === id ? { ...f, estado: "ANULADO" } : f)));
+        Swal.fire({
+          icon: "success",
+          title: "Registro Anulado",
+          timer: 2000,
+          showConfirmButton: false,
+          background: "#0f172a",
+          color: "#f1f5f9",
+        });
+      } catch (error) {
+        console.error("Error al anular:", error);
+      }
     }
+  };
+
+  const exportarExcel = () => {
+    const dataParaExcel = [];
+    filteredFlights.forEach((f) => {
+      (f.personas || []).forEach((p) => {
+        dataParaExcel.push({
+          "Nº REGISTRO": f.nroRegistro || "S/N",
+          ESTADO: f.estado || "ACTIVO",
+          FECHA: f.fecha,
+          HORA: f.hora,
+          MATRÍCULA: f.matricula,
+          MOVIMIENTO: f.tipoMovimiento,
+          "ORIGEN/DESTINO": f.tipoMovimiento === "ARRIBO" ? f.procedencia : f.destino,
+          TIPO: p.tripPax === "T" ? "TRIPULANTE" : "PASAJERO",
+          "APELLIDO Y NOMBRE": p.apellidoNombre,
+          NACIONALIDAD: p.nacionalidad || "ARG",
+          "TIPO DOC": p.tipoDocumento || "DNI",
+          "NRO DOC": p.nroDni,
+          OBSERVACIONES: f.observaciones || "",
+          OFICIAL: `${f.gradoOficial} ${f.nombreOficial}`,
+        });
+      });
+    });
+    const ws = XLSX.utils.json_to_sheet(dataParaExcel);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Vuelos");
+    XLSX.writeFile(wb, `Reporte_SMA_${new Date().toLocaleDateString()}.xlsx`);
+  };
+
+  const exportarPDF = () => {
+    const doc = new jsPDF({ orientation: "landscape" });
+    const tableRows = [];
+    filteredFlights.forEach((f) => {
+      (f.personas || []).forEach((p) => {
+        tableRows.push([
+          f.nroRegistro || "-",
+          f.estado === "ANULADO" ? `${f.fecha} (ANULADO)` : f.fecha,
+          f.hora,
+          f.matricula,
+          f.tipoMovimiento,
+          f.tipoMovimiento === "ARRIBO" ? f.procedencia : f.destino,
+          p.tripPax === "T" ? "TRIP" : "PAX",
+          p.apellidoNombre,
+          p.nacionalidad || "ARG",
+          p.tipoDocumento || "DNI",
+          p.nroDni,
+          f.observaciones || "-",
+          `${f.gradoOficial} ${f.nombreOficial}`,
+        ]);
+      });
+    });
+    autoTable(doc, {
+      head: [["Nº REG", "FECHA", "HORA", "MATRÍCULA", "MOV.", "ORIG/DEST", "TIPO", "NOMBRE", "NAC.", "DOC", "NÚMERO", "OBS.", "OFICIAL"]],
+      body: tableRows,
+      theme: "grid",
+      styles: { fontSize: 5.5, cellPadding: 1 },
+      headStyles: { fillColor: [15, 23, 42] },
+    });
+    doc.save(`Reporte_SMA_General_${new Date().toLocaleDateString()}.pdf`);
   };
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto p-2">
-      {/* Filtros */}
       <div className="bg-slate-900/40 backdrop-blur-md p-6 border border-slate-800 rounded-2xl shadow-2xl">
-        <div className="flex flex-col lg:flex-row gap-6 items-end">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 grow w-full">
-            <div>
-              <label className="text-[10px] text-slate-500 font-black uppercase mb-2 block tracking-widest">Matrícula</label>
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                <input
-                  className="bg-slate-950/50 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-2.5 w-full outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  placeholder="Ej: LV-GVO..."
-                  value={filterMatricula}
-                  onChange={(e) => handleFilterChange(setFilterMatricula, e.target.value)}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] text-slate-500 font-black uppercase mb-2 block tracking-widest">Persona o DNI</label>
-              <div className="relative">
-                <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                <input
-                  className="bg-slate-950/50 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-2.5 w-full outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  placeholder="Nombre o DNI..."
-                  value={filterPersona}
-                  onChange={(e) => handleFilterChange(setFilterPersona, e.target.value)}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] text-slate-500 font-black uppercase mb-2 block tracking-widest">Fecha</label>
-              <div className="relative">
-                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={16} />
-                <input
-                  type="date"
-                  className="bg-slate-950/50 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-2.5 w-full outline-none focus:ring-2 focus:ring-blue-500 text-sm scheme-dark"
-                  value={filterFecha}
-                  onChange={(e) => handleFilterChange(setFilterFecha, e.target.value)}
-                />
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div className="w-full">
+            <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2 block ml-1">Aeronave / Nº Registro</label>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+              <input type="text" className="bg-slate-950/50 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-2.5 w-full outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={filterMatricula} onChange={(e) => setFilterMatricula(e.target.value)} placeholder="Matrícula o SMA..." />
             </div>
           </div>
+          <div className="w-full">
+            <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2 block ml-1">Persona (Nombre)</label>
+            <div className="relative">
+              <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+              <input type="text" className="bg-slate-950/50 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-2.5 w-full outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={filterPersona} onChange={(e) => setFilterPersona(e.target.value)} placeholder="Buscar por nombre..." />
+            </div>
+          </div>
+          <div className="w-full">
+            <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2 block ml-1">Fecha</label>
+            <input type="date" className="bg-slate-950/50 border border-slate-700 text-white rounded-xl px-4 py-2.5 w-full outline-none text-sm" value={filterFecha} onChange={(e) => setFilterFecha(e.target.value)} />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={exportarPDF} className="flex-1 bg-rose-600 hover:bg-rose-500 text-white h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all shadow-lg shadow-rose-900/20"><FileText size={16} /> REPORTE PDF</button>
+            <button onClick={exportarExcel} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all shadow-lg shadow-emerald-900/20"><TableIcon size={16} /> EXCEL</button>
+          </div>
+        </div>
 
-          <div className="flex gap-2 w-full lg:w-auto">
-            <button
-              onClick={cleanFilters}
-              className="flex-1 lg:flex-none px-4 bg-slate-800 text-slate-400 h-10 rounded-xl border border-slate-700 hover:text-white transition-all flex items-center justify-center gap-2 uppercase text-[10px] font-black"
-              title="Limpiar filtros"
-            >
-              <FilterX size={14} />
-            </button>
-            <button
-              onClick={() => downloadReport("excel")}
-              className="flex-1 lg:flex-none px-4 bg-emerald-500/10 text-emerald-500 h-10 rounded-xl border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-2 uppercase text-[10px] font-black"
-            >
-              <FileSpreadsheet size={16} /> EXCEL
-            </button>
-            <button
-              onClick={() => downloadReport("pdf")}
-              className="flex-1 lg:flex-none px-4 bg-red-500/10 text-red-500 h-10 rounded-xl border border-red-500/20 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2 uppercase text-[10px] font-black"
-            >
-              <FileText size={16} /> PDF
-            </button>
+        <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-800/50">
+          <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800 flex items-center gap-4">
+            <div className="p-2 bg-blue-500/10 rounded-lg"><Plane size={20} className="text-blue-500" /></div>
+            <div>
+              <p className="text-[9px] text-slate-500 font-black uppercase">Vuelos</p>
+              <p className="text-xl font-black text-white">{stats.totalVuelos}</p>
+            </div>
+          </div>
+          <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800 flex items-center gap-4">
+            <div className="p-2 bg-emerald-500/10 rounded-lg"><UserCheck size={20} className="text-emerald-500" /></div>
+            <div>
+              <p className="text-[9px] text-slate-500 font-black uppercase">Pasajeros</p>
+              <p className="text-xl font-black text-white">{stats.totalPax}</p>
+            </div>
+          </div>
+          <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800 flex items-center gap-4">
+            <div className="p-2 bg-amber-500/10 rounded-lg"><Users size={20} className="text-amber-500" /></div>
+            <div>
+              <p className="text-[9px] text-slate-500 font-black uppercase">Tripulantes</p>
+              <p className="text-xl font-black text-white">{stats.totalTrip}</p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-950/40 text-blue-400 text-[10px] uppercase tracking-widest font-black">
-              <tr>
-                <th className="p-5">Control Folio</th>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-950/40 text-blue-400 text-[10px] uppercase tracking-widest font-black border-b border-slate-800">
+                <th className="p-5">Nº Registro</th>
                 <th className="p-5">Fecha / Hora</th>
-                <th className="p-5">Aeronave</th>
+                <th className="p-5">Matrícula</th>
                 <th className="p-5">Movimiento</th>
                 <th className="p-5">Manifiesto</th>
                 <th className="p-5">Observaciones</th>
-                <th className="p-5 text-center">Acción</th>
+                <th className="p-5 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50">
-              {flights.length > 0 ? (
-                flights.map((f) => (
-                  <tr key={f._id} className={`group hover:bg-blue-500/5 transition-colors ${f.estado === "ANULADO" ? "bg-red-500/5" : ""}`}>
-                    <td className="p-5">
+              {currentItems.length > 0 ? (
+                currentItems.map((f) => (
+                  <tr key={f._id} className={`transition-all ${f.estado === "ANULADO" ? "bg-red-950/10 opacity-50 grayscale" : "hover:bg-blue-500/5"}`}>
+                    <td className="p-5 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <Hash size={12} className={f.estado === "ANULADO" ? "text-red-500" : "text-blue-500"} />
-                        <span className={`text-[11px] font-mono font-black ${f.estado === "ANULADO" ? "text-red-400/60" : "text-blue-300"}`}>
-                          {f.nroRegistro}
-                        </span>
+                        <Hash size={14} className="text-slate-600" />
+                        <span className="font-mono font-bold text-blue-400 text-sm">{f.nroRegistro || "S/N"}</span>
                       </div>
                     </td>
-                    <td className="p-5">
+                    <td className="p-5 whitespace-nowrap">
                       <div className="font-bold text-slate-200 text-sm">{f.fecha}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{f.hora} HS</div>
+                      <div className="text-[10px] text-slate-500 font-mono mt-1">{f.hora} HS</div>
+                    </td>
+                    <td className="p-5 font-black text-slate-200 text-base">
+                      {f.matricula}
+                      {f.estado === "ANULADO" && <span className="block text-[8px] text-red-500 tracking-tighter">REGISTRO ANULADO</span>}
                     </td>
                     <td className="p-5">
-                      <div className="font-black text-white text-sm">{f.matricula}</div>
-                      <div className="text-[9px] text-slate-500 uppercase">{f.tipoAeronave}</div>
+                      <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${f.tipoMovement === "ARRIBO" ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-500"}`}>{f.tipoMovimiento}</span>
                     </td>
                     <td className="p-5">
-                      <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${f.tipoMovimiento === "ARRIBO" ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400"}`}>
-                        {f.tipoMovimiento}
-                      </span>
-                    </td>
-                    <td className="p-5">
-                      <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-slate-300">
-                        <Users size={12} className="text-blue-500" /> {f.personas?.length || 0} Personas
+                      <div className="flex items-center gap-2 text-slate-200 font-bold text-[11px] uppercase">
+                        <Users size={14} className="text-blue-500 shrink-0" />
+                        {f.personas?.length || 0} Pers.
                       </div>
                     </td>
-                    <td className="p-5 max-w-xs">
-                      <div className="flex gap-2">
-                        <MessageSquare size={14} className={f.observaciones ? "text-amber-500" : "text-slate-700"} />
-                        <p className="text-[10px] text-slate-400 italic line-clamp-2 leading-relaxed">
-                          {f.observaciones || "Sin novedades"}
-                        </p>
+                    <td className="p-5">
+                      <div className="flex items-start gap-2 max-w-45">
+                        <MessageSquare size={14} className={`shrink-0 mt-0.5 ${f.observaciones ? "text-amber-500" : "text-slate-700"}`} />
+                        <p className="text-[10px] text-slate-400 uppercase italic line-clamp-2 leading-tight">{f.observaciones || "Sin novedades"}</p>
                       </div>
                     </td>
                     <td className="p-5 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        {f.estado !== "ANULADO" ? (
+                      <div className="flex justify-center gap-2">
+                        {f.estado !== "ANULADO" && (
                           <>
-                            <button
-                              onClick={() => {
-                                setSelectedFlight(f);
-                                setIsEditModalOpen(true);
-                              }}
-                              className="p-2 text-amber-400 hover:text-white hover:bg-amber-500 rounded-lg transition-all"
-                              title="Editar"
-                            >
-                              <Pencil size={18} />
-                            </button>
-                            <button
-                              onClick={() => downloadSingleFlight(f)}
-                              className="p-2 text-blue-400 hover:text-white hover:bg-blue-500 rounded-lg transition-all"
-                              title="Descargar"
-                            >
-                              <Download size={18} />
-                            </button>
-                            <button
-                              onClick={() => anularRegistro(f._id)}
-                              className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
-                              title="Anular"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            <button onClick={() => descargarVueloUnicoPDF(f)} className="text-emerald-500 hover:bg-emerald-500/10 p-2 rounded-lg transition-all" title="Descargar"><Download size={18} /></button>
+                            <button onClick={() => onEdit(f)} className="text-slate-400 hover:text-blue-400 p-2 rounded-lg hover:bg-blue-500/10" title="Editar"><Edit3 size={18} /></button>
+                            <button onClick={() => anularVuelo(f._id)} className="text-slate-400 hover:text-orange-500 p-2 rounded-lg hover:bg-orange-500/10" title="Anular"><Ban size={18} /></button>
                           </>
-                        ) : (
-                          <span className="text-[9px] font-black text-red-500/40 uppercase">Inactivo</span>
                         )}
                       </div>
                     </td>
@@ -355,161 +322,24 @@ const FlightTable = ({ refreshTrigger }) => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="p-20 text-center text-slate-600 uppercase font-black text-xs tracking-widest">
-                    No se encontraron registros
-                  </td>
+                  <td colSpan="7" className="p-20 text-center text-slate-500 uppercase text-xs font-black tracking-[0.2em]">No se encontraron registros</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
 
-      {/* Paginación */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-bold uppercase tracking-wider">
-        <div className="bg-slate-900/50 px-4 py-2 rounded-lg border border-slate-800">
-          Mostrando <span className="text-blue-400">{(page - 1) * limit + 1}</span>–
-          <span className="text-blue-400">{Math.min(page * limit, total)}</span> de <span className="text-white">{total}</span>
-        </div>
-        <div className="flex gap-2">
-          <button
-            disabled={page === 1}
-            onClick={() => setPage(page - 1)}
-            className="px-4 py-2 bg-slate-800 rounded-lg disabled:opacity-20 hover:bg-slate-700 transition-colors"
-          >
-            ← ANTERIOR
-          </button>
-          <button
-            disabled={page === pages}
-            onClick={() => setPage(page + 1)}
-            className="px-4 py-2 bg-slate-800 rounded-lg disabled:opacity-20 hover:bg-slate-700 transition-colors"
-          >
-            SIGUIENTE →
-          </button>
-        </div>
-        <select
-          className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 outline-none text-blue-400"
-          value={limit}
-          onChange={(e) => {
-            setLimit(+e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value={25}>25</option>
-          <option value={50}>50</option>
-          <option value={100}>100</option>
-        </select>
-      </div>
-
-      {/* Modal edición */}
-      {isEditModalOpen && selectedFlight && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[50vh] animate-in fade-in zoom-in duration-200">
-            
-            {/* Cabecera */}
-            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/50 shrink-0">
-              <div>
-                <h3 className="text-white font-black uppercase tracking-tighter text-lg">Editar Registro</h3>
-                <p className="text-blue-500 font-mono text-xs">FOLIO: {selectedFlight.nroRegistro}</p>
-              </div>
-              <button
-                onClick={() => setIsEditModalOpen(false)}
-                className="text-slate-500 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Formulario con scroll */}
-            <form onSubmit={handleUpdateFlight} className="flex flex-col grow overflow-hidden">
-              <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar grow">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] text-slate-500 font-black uppercase mb-1 block tracking-widest">Matrícula</label>
-                    <input
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all uppercase"
-                      value={selectedFlight.matricula}
-                      onChange={(e) => setSelectedFlight({ ...selectedFlight, matricula: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 font-black uppercase mb-1 block tracking-widest">Movimiento</label>
-                    <select
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white outline-none focus:ring-2 focus:ring-blue-500"
-                      value={selectedFlight.tipoMovimiento}
-                      onChange={(e) => setSelectedFlight({ ...selectedFlight, tipoMovimiento: e.target.value })}
-                    >
-                      <option value="ARRIBO">ARRIBO</option>
-                      <option value="PARTIDA">PARTIDA</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Personas */}
-                <div>
-                  <label className="text-[10px] text-slate-500 font-black uppercase mb-2 block tracking-widest">Pasajeros / Tripulación</label>
-                  <div className="space-y-2">
-                    {selectedFlight.personas.map((p, idx) => (
-                      <div key={idx} className="grid grid-cols-2 gap-2 bg-slate-950/50 p-2 rounded-lg border border-slate-800">
-                        <div className="flex flex-col gap-1 border-r border-slate-800 pr-2">
-                          <span className="text-[8px] text-slate-500 font-bold uppercase">Apellido y Nombre</span>
-                          <input
-                            className="bg-transparent text-white text-xs outline-none uppercase"
-                            value={p.apellidoNombre}
-                            onChange={(e) => {
-                              const newPersons = [...selectedFlight.personas];
-                              newPersons[idx].apellidoNombre = e.target.value;
-                              setSelectedFlight({ ...selectedFlight, personas: newPersons });
-                            }}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1 pl-2">
-                          <span className="text-[8px] text-slate-500 font-bold uppercase">Documento</span>
-                          <input
-                            className="bg-transparent text-white text-xs outline-none"
-                            value={p.nroDni}
-                            onChange={(e) => {
-                              const newPersons = [...selectedFlight.personas];
-                              newPersons[idx].nroDni = e.target.value;
-                              setSelectedFlight({ ...selectedFlight, personas: newPersons });
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[10px] text-slate-500 font-black uppercase mb-1 block tracking-widest">Observaciones</label>
-                  <textarea
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white h-24 outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                    value={selectedFlight.observaciones}
-                    onChange={(e) => setSelectedFlight({ ...selectedFlight, observaciones: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {/* Botones */}
-              <div className="p-6 border-t border-slate-800 bg-slate-950/50 flex gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="flex-1 py-3 bg-slate-800 text-slate-400 rounded-xl font-black text-[10px] uppercase hover:text-white transition-all"
-                >
-                  Descartar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase hover:bg-blue-500 shadow-lg shadow-blue-500/20 transition-all"
-                >
-                  Guardar Cambios
-                </button>
-              </div>
-            </form>
+        <div className="p-4 bg-slate-950/40 border-t border-slate-800 flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[10px] text-slate-500 font-black uppercase">Página {currentPage} de {totalPages}</span>
+            <span className="text-[9px] text-blue-500/50 font-bold">{filteredFlights.length} resultados</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage((prev) => prev - 1)} className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-blue-400 disabled:opacity-10 transition-all"><ChevronLeft size={18} /></button>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage((prev) => prev + 1)} className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-blue-400 disabled:opacity-10 transition-all"><ChevronRight size={18} /></button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

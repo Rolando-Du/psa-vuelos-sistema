@@ -6,7 +6,7 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
     // 1. Al iniciar, buscamos en sessionStorage (se borra al cerrar la pestaña)
     const [user, setUser] = useState(() => {
-        const savedUser = sessionStorage.getItem('user'); 
+        const savedUser = sessionStorage.getItem('user'); // CAMBIADO
         if (savedUser) {
             try {
                 const parsedUser = JSON.parse(savedUser);
@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }) => {
         
         setUser(userData);
         // 2. Guardamos en sessionStorage
-        sessionStorage.setItem('user', JSON.stringify(userData)); 
+        sessionStorage.setItem('user', JSON.stringify(userData)); // CAMBIADO
         
         // Configuramos el token en axios para futuras peticiones
         api.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
