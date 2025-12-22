@@ -102,8 +102,8 @@ function Dashboard() {
               >
                 Registro de<span className="text-blue-500">Vuelos</span>
               </span>
-              <span className="text-[10px] font-bold text-blue-400/60 tracking-[0.5em] uppercase mt-1.5 ml-0.5">
-                UOSPSMA
+              <span className="text-[14px] font-bold text-blue-400/60 tracking-[0.5em] uppercase mt-1.5 ml-0.5">
+                UOSP-SMA
               </span>
             </div>
           </div>
