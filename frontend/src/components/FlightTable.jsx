@@ -18,7 +18,6 @@ import {
   ChevronRight,
   Download,
   Hash,
-  PlusCircle,
 } from "lucide-react";
 import FlightForm from "./FlightForm";
 
@@ -74,7 +73,7 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
 
-  // Modal interno (fallback si no viene onEdit)
+  // Modal interno (fallback si no viene onEdit) -> SOLO PARA EDITAR
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFlight, setSelectedFlight] = useState(null);
 
@@ -166,18 +165,18 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
   }, []);
 
   const handleFlightActionSuccess = useCallback(async () => {
-    await fetchFlights(); // ✅ refresca y evita warning de "unused"
+    await fetchFlights();
     handleCloseModal();
   }, [fetchFlights, handleCloseModal]);
 
   const openLocalEditModal = useCallback(async (flight) => {
     if (!flight?._id) return;
 
-    // abrimos ya con lo que tenemos (UX rápida)
+    // Abrimos ya con lo del listado
     setSelectedFlight(flight);
     setIsModalOpen(true);
 
-    // intentamos traer el registro completo (si backend soporta GET /flights/:id)
+    // Intentamos traer el registro completo (si backend soporta GET /flights/:id)
     try {
       const res = await api.get(`/flights/${flight._id}`);
       const full = res?.data;
@@ -190,19 +189,14 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
       if (status !== 404) {
         console.warn("[FlightTable] No se pudo traer flight por ID:", err);
       }
-      // si 404, no rompemos: seguimos con el flight del listado
+      // Si 404, seguimos con el flight del listado sin romper
     }
   }, []);
 
-  // Editar:
-  // - si viene onEdit => lo usa
-  // - si no viene => modal interno (con fallback)
   const handleEditClick = useCallback(
     (flight) => {
       if (!flight) return;
       if (flight.estado === "ANULADO") return;
-
-      console.log("EDIT CLICK", flight);
 
       if (typeof onEdit === "function") {
         onEdit(flight);
@@ -404,9 +398,7 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
           <div className="bg-slate-900 border border-slate-800 p-2 rounded-2xl w-full max-w-4xl shadow-2xl my-auto">
             <div className="p-4 flex justify-between items-center">
               <h2 className="text-xl font-bold text-white uppercase tracking-tight">
-                {selectedFlight
-                  ? "Editar Registro SMA"
-                  : "Nuevo Registro de Vuelo"}
+                Editar Registro SMA
               </h2>
               <button
                 onClick={handleCloseModal}
@@ -429,7 +421,7 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
 
       {/* SECCIÓN DE FILTROS Y ESTADÍSTICAS */}
       <div className="bg-slate-900/40 backdrop-blur-md p-6 border border-slate-800 rounded-2xl shadow-2xl">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div className="w-full md:col-span-1">
             <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2 block ml-1">
               Aeronave / Nº Registro
@@ -480,18 +472,7 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
             />
           </div>
 
-          <div className="flex gap-2 md:col-span-2">
-            <button
-              onClick={() => {
-                setSelectedFlight(null);
-                setIsModalOpen(true);
-              }}
-              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all shadow-lg shadow-blue-900/20"
-              title="Nuevo vuelo"
-            >
-              <PlusCircle size={16} /> NUEVO
-            </button>
-
+          <div className="flex gap-2 md:col-span-1">
             <button
               onClick={exportarPDF}
               className="flex-1 bg-rose-600 hover:bg-rose-500 text-white h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all shadow-lg shadow-rose-900/20"
