@@ -1,12 +1,13 @@
 import express from 'express';
-import { 
-    getFlights, 
-    createFlight, 
-    updateFlight, 
+import {
+    getFlights,
+    createFlight,
+    updateFlight,
     deleteFlight,
     searchByDni,
     searchByMatricula,
-    searchOficialByName 
+    searchOficialByName,
+    getFlightById
 } from '../controllers/flightController.js';
 
 const router = express.Router();
@@ -28,15 +29,17 @@ router.get('/', getFlights);
 router.post('/', createFlight);
 
 // --- RUTAS DE BÚSQUEDA ---
-// IMPORTANTE: Deben estar definidas ANTES de las rutas con ':id' 
+// IMPORTANTE: Deben estar definidas ANTES de las rutas con ':id'
 // para evitar que Express confunda "search" con un ID de MongoDB.
 router.get('/search/dni/:dni', searchByDni);
 router.get('/search/matricula/:matricula', searchByMatricula);
 router.get('/search/oficial/:nombre', searchOficialByName);
 
-// --- RUTAS DE ACCIÓN POR ID ---
+// --- RUTAS POR ID ---
+// ✅ GET    /api/flights/:id -> Obtener vuelo por ID (soluciona el 404)
 // PUT    /api/flights/:id -> Actualiza o anula un vuelo
 // DELETE /api/flights/:id -> Elimina físicamente de la BD
+router.get('/:id', getFlightById);
 router.put('/:id', updateFlight);
 router.delete('/:id', deleteFlight);
 

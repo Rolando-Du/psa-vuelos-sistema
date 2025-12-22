@@ -1,5 +1,28 @@
 import Flight from "../models/Flight.js";
 
+/**
+ * ✅ Obtener vuelo por ID
+ * GET /api/flights/:id
+ * (Esto soluciona el 404 cuando el front llama /flights/<id>)
+ */
+export const getFlightById = async (req, res) => {
+  try {
+    const flight = await Flight.findById(req.params.id).lean();
+
+    if (!flight) {
+      return res.status(404).json({ message: "Registro no encontrado" });
+    }
+
+    return res.status(200).json(flight);
+  } catch (error) {
+    // Si el ID no es válido (por ejemplo, no es ObjectId), Mongoose cae acá
+    return res.status(400).json({
+      message: "ID inválido o error al buscar el registro",
+      error: error.message,
+    });
+  }
+};
+
 // 1. Obtener todos los vuelos - OPTIMIZADO PARA EVITAR ERROR 400
 export const getFlights = async (req, res) => {
   try {
@@ -146,6 +169,7 @@ export const updateFlight = async (req, res) => {
 
     if (!updatedFlight)
       return res.status(404).json({ message: "Registro no encontrado" });
+
     res.status(200).json(updatedFlight);
   } catch (error) {
     res
