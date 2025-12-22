@@ -1,101 +1,121 @@
 import mongoose from "mongoose";
+import { generateSMA } from "../utils/generateSMA.js";
+
+// (Opcional / legacy) si algún día volvés a usar contador incremental
+// import Counter from "../models/Counter.js";
+
+const personaSchema = new mongoose.Schema(
+  {
+    apellidoNombre: { type: String, required: true },
+    tipoDocumento: {
+      type: String,
+      enum: ["DNI", "PASAPORTE", "CEDULA"],
+      default: "DNI",
+    },
+    nroDni: { type: String, required: true },
+    tripPax: { type: String, enum: ["T", "P"], default: "T" },
+    nacionalidad: { type: String, default: "ARG" },
+    equipajeMano: { type: Number, default: 0, min: 0 },
+    equipajeBodega: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false }
+);
 
 const flightSchema = new mongoose.Schema(
   {
     nroRegistro: {
       type: String,
-      unique: true,
-      index: true,
-      required: true,
+      unique: true, // ✅ Esto ya crea índice único en Mongo (no dupliques con schema.index)
+      // index: true, // ❌ NO lo actives si ya usás unique, porque también duplica
     },
+
+    // 🔥 IMPORTANTE: si querés cargar vuelos del inicio del mes, NO bloquees fechas pasadas
+    // Si algún día querés volver a bloquear, abajo te dejo el validador comentado
     fecha: { type: String, required: true },
+
+    // ✅ Si querés volver a bloquear fechas pasadas, descomentá este bloque:
+    /*
+    fecha: {
+      type: String,
+      required: true,
+      validate: {
+        validator: function (v) {
+          // Permite controlar por ENV sin tocar código
+          // if (process.env.ALLOW_PAST_FLIGHTS === "true") return true;
+
+          const fechaIngresada = new Date(v + "T00:00:00");
+          const hoy = new Date();
+          hoy.setHours(0, 0, 0, 0);
+          return fechaIngresada >= hoy;
+        },
+        message: (props) => `La fecha ${props.value} no puede ser una fecha pasada.`,
+      },
+    },
+    */
+
     hora: { type: String, required: true },
-    matricula: { type: String, required: true, trim: true, uppercase: true },
-    tipoAeronave: { type: String, required: true, trim: true, uppercase: true },
-    propietario: { type: String, default: "PARTICULAR", trim: true, uppercase: true },
-    procedencia: { type: String, default: "N/A", trim: true, uppercase: true },
-    destino: { type: String, default: "N/A", trim: true, uppercase: true },
+    matricula: { type: String, required: true },
+    tipoAeronave: { type: String, required: true },
+    propietario: { type: String, default: "" },
+    procedencia: { type: String, default: "" },
+    destino: { type: String, default: "" },
+
     tipoMovimiento: {
       type: String,
       enum: ["ARRIBO", "PARTIDA"],
       required: true,
     },
-    personas: [
-      {
-        apellidoNombre: { type: String, required: true, trim: true, uppercase: true },
-        tipoDni: { type: String, enum: ["DNI", "PAS", "EXT"], default: "DNI" },
-        nroDni: { type: String, required: true, trim: true },
-        tripPax: { type: String, enum: ["T", "P"], default: "T" },
-        nacionalidad: { type: String, default: "ARG", trim: true, uppercase: true },
-        equipajeMano: { type: Number, default: 0 },
-        equipajeBodega: { type: Number, default: 0 },
+
+    personas: {
+      type: [personaSchema],
+      required: true,
+      validate: {
+        validator: (arr) => Array.isArray(arr) && arr.length > 0,
+        message: "El manifiesto de personas no puede estar vacío.",
       },
-    ],
+    },
+
     gradoOficial: { type: String, required: true },
-    nombreOficial: { type: String, required: true, trim: true, uppercase: true },
-    lupOficial: { type: String, required: true, trim: true },
+    nombreOficial: { type: String, required: true },
+    lupOficial: { type: String, required: true },
+
     observaciones: { type: String, default: "" },
+
     estado: {
       type: String,
       enum: ["ACTIVO", "ANULADO"],
       default: "ACTIVO",
-      index: true,
     },
-    anuladoAt: { type: Date, default: null },
-    anuladoBy: { type: String, default: null },
   },
-  { 
-    timestamps: true,
-    strict: true 
+  { timestamps: true }
+);
+
+// --- ÍNDICES ---
+// ❌ NO pongas esto porque duplica con unique: true en nroRegistro
+// flightSchema.index({ nroRegistro: 1 });
+
+// ✅ Índices útiles
+flightSchema.index({ matricula: 1 });
+flightSchema.index({ "personas.nroDni": 1 });
+
+flightSchema.index(
+  { fecha: 1, hora: 1, matricula: 1, tipoMovimiento: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { estado: "ACTIVO" },
+    name: "idx_vuelo_unico_activo",
   }
 );
 
-/**
- * NORMALIZACIÓN PARA .save()
- * Se ejecuta al crear (flight.save() o Flight.create())
- */
-flightSchema.pre("save", function () {
-  this.matricula = (this.matricula || "S/M").toUpperCase().trim();
-  this.nombreOficial = (this.nombreOficial || "").toUpperCase().trim();
-  
-  // Limpieza de procedencia/destino según movimiento
-  if (this.tipoMovimiento === "ARRIBO") {
-    this.destino = "N/A";
-  } else {
-    this.procedencia = "N/A";
-  }
-
-  // Normalizar array de personas
-  if (this.personas && Array.isArray(this.personas)) {
-    this.personas.forEach((p) => {
-      p.apellidoNombre = (p.apellidoNombre || "SIN NOMBRE").toUpperCase().trim();
-      p.nroDni = (p.nroDni || "").toString().trim();
-    });
-  }
-  // Al no declarar 'next' en los parámetros, Mongoose no lo busca.
-});
-
-/**
- * NORMALIZACIÓN PARA ACTUALIZACIONES
- * Se ejecuta en findOneAndUpdate / findByIdAndUpdate
- */
-flightSchema.pre("findOneAndUpdate", function () {
-  const update = this.getUpdate();
-  if (!update) return;
-
-  // Si se actualiza la matrícula
-  if (update.matricula) {
-    update.matricula = update.matricula.toUpperCase().trim();
-  }
-
-  // Si se actualizan personas (reemplazo de array)
-  if (update.personas && Array.isArray(update.personas)) {
-    update.personas = update.personas.map(p => ({
-      ...p,
-      apellidoNombre: (p.apellidoNombre || "").toUpperCase().trim(),
-      nroDni: (p.nroDni || "").toString().trim()
-    }));
+// --- PRE SAVE (PROMISE STYLE) ---
+// ✅ En hooks async NO uses next()
+flightSchema.pre("save", async function () {
+  if (!this.nroRegistro) {
+    // console.log("Generando nroRegistro para nuevo vuelo..."); // (debug opcional)
+    this.nroRegistro = await generateSMA();
+    // console.log("Asignado nroRegistro:", this.nroRegistro); // (debug opcional)
   }
 });
 
-export default mongoose.model("Flight", flightSchema);
+const Flight = mongoose.models.Flight || mongoose.model("Flight", flightSchema);
+export default Flight;

@@ -1,59 +1,43 @@
 import express from 'express';
-import {
-    getFlights,
-    getFlightsAnulados,
-    createFlight,
-    anularFlight,
-    updateFlight, // Importamos la nueva función de edición
+import { 
+    getFlights, 
+    createFlight, 
+    updateFlight, 
+    deleteFlight,
+    searchByDni,
     searchByMatricula,
-    exportToExcel,
-    exportToPDF,
-    exportSingleFlight
+    searchOficialByName 
 } from '../controllers/flightController.js';
-
-import { protect } from '../middlewares/auth.js';
 
 const router = express.Router();
 
 /**
- * RUTAS DE EXPORTACIÓN (REPORTES)
- * Se colocan arriba para evitar conflictos con parámetros dinámicos.
+ * MIDDLEWARE DE DIAGNÓSTICO
+ * Este bloque imprimirá en la consola de tu BACKEND (la terminal negra)
+ * qué ruta se está intentando acceder. Ayuda a identificar el Error 400.
  */
+router.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+    next();
+});
 
-// Exportación general (basada en filtros actuales)
-router.get('/export/excel', exportToExcel);
-router.get('/export/pdf', exportToPDF);
-
-// Exportación de un vuelo específico por ID
-router.get('/export/single/:id/:format', exportSingleFlight);
-
-/**
- * RUTAS DE CONSULTA (GET)
- */
-
-// Obtener vuelos activos (con paginación y filtros)
+// --- RUTAS BASE ---
+// GET  /api/flights -> Obtiene la lista completa
+// POST /api/flights -> Registra un nuevo vuelo
 router.get('/', getFlights);
+router.post('/', createFlight);
 
-// Obtener vuelos anulados (con paginación y filtros)
-router.get('/anulados', getFlightsAnulados);
+// --- RUTAS DE BÚSQUEDA ---
+// IMPORTANTE: Deben estar definidas ANTES de las rutas con ':id' 
+// para evitar que Express confunda "search" con un ID de MongoDB.
+router.get('/search/dni/:dni', searchByDni);
+router.get('/search/matricula/:matricula', searchByMatricula);
+router.get('/search/oficial/:nombre', searchOficialByName);
 
-// Buscar datos históricos de una matrícula
-router.get('/search-matricula/:matricula', searchByMatricula);
-
-
-/**
- * RUTAS DE ACCIÓN (POST / PATCH / PUT)
- * Requieren token de autenticación para asegurar la integridad de los datos.
- */
-
-// Crear un nuevo registro de vuelo
-router.post('/', protect, createFlight);
-
-// Editar un registro existente (Permitido para correcciones)
-// Usamos PUT porque actualizamos el recurso con datos específicos
-router.put('/:id', protect, updateFlight);
-
-// Anular un registro existente
-router.patch('/:id/anular', protect, anularFlight);
+// --- RUTAS DE ACCIÓN POR ID ---
+// PUT    /api/flights/:id -> Actualiza o anula un vuelo
+// DELETE /api/flights/:id -> Elimina físicamente de la BD
+router.put('/:id', updateFlight);
+router.delete('/:id', deleteFlight);
 
 export default router;
