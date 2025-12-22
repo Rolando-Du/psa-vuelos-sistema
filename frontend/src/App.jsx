@@ -42,7 +42,6 @@ function Dashboard() {
     if (!flights || !Array.isArray(flights))
       return { total: 0, arribos: 0, partidas: 0 };
 
-    // Filtramos los que no estén anulados
     const activeFlights = flights.filter((f) => f.estado !== "ANULADO");
 
     return {
@@ -60,20 +59,27 @@ function Dashboard() {
     <div className="min-h-screen bg-[#020617] font-sans antialiased text-slate-300">
       {/* NAVBAR */}
       <nav className="bg-[#0f172a] border-b border-blue-900/30 shadow-2xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <img
               src={logoPSA}
               alt="Logo PSA"
-              className="h-10 w-auto object-contain"
+              className="h-12 w-auto object-contain"
             />
-            <div className="hidden sm:block w-px h-8 bg-blue-900/40"></div>
-            <span
-              className="text-xl font-black tracking-[0.15em] uppercase text-white"
-              style={{ fontFamily: "'Orbitron', sans-serif" }}
-            >
-              Registro de<span className="text-blue-500">Vuelos</span>
-            </span>
+            <div className="hidden sm:block w-px h-10 bg-blue-900/40"></div>
+            
+            {/* TÍTULO Y SIGLA DEBAJO */}
+            <div className="flex flex-col justify-center">
+              <span
+                className="text-lg sm:text-xl font-black tracking-widest uppercase text-white leading-none"
+                style={{ fontFamily: "'Orbitron', sans-serif" }}
+              >
+                Registro de<span className="text-blue-500">Vuelos</span>
+              </span>
+              <span className="text-[14px] font-bold text-blue-400/60 tracking-[0.5em] uppercase mt-1.5 ml-0.5">
+                UOSP-SMA
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-6">
@@ -172,7 +178,6 @@ function Dashboard() {
             </button>
           </div>
 
-          {/* CONTENEDOR ANIMADO */}
           <div
             className={`transition-all duration-700 ease-in-out overflow-hidden ${
               isTableOpen
@@ -187,7 +192,6 @@ function Dashboard() {
         </section>
       </main>
 
-      {/* FOOTER */}
       <footer className="py-12 text-center">
         <div className="w-20 h-1 bg-slate-800 mx-auto mb-6 rounded-full"></div>
         <p className="text-slate-600 text-[10px] font-bold uppercase tracking-[0.3em]">
