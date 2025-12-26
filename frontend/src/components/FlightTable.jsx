@@ -22,46 +22,46 @@ import {
 import FlightForm from "./FlightForm";
 
 /* ─────────────────────────────────────────────────────────────
-   Helpers de fecha:
-   - Input type="date" usa: YYYY-MM-DD
-   - Backend puede venir:
-     * "YYYY-MM-DD"
-     * "DD/MM/YYYY"
-     * ISO: "YYYY-MM-DDTHH:mm:ss.sssZ"
+   HELPERS DE FECHA (PARA HORA LOCAL)
 ───────────────────────────────────────────────────────────── */
 const toISODate = (value) => {
   if (!value) return "";
 
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().split("T")[0];
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   }
 
   if (typeof value === "string") {
     const v = value.trim();
-
-    if (v.includes("T")) return v.split("T")[0];
+    if (v.includes("T")) {
+      const dateObj = new Date(v);
+      if (!isNaN(dateObj.getTime())) {
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+        const d = String(dateObj.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      }
+    }
     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
-
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
       const [d, m, y] = v.split("/");
       return `${y}-${m}-${d}`;
     }
   }
-
   return "";
 };
 
-const displayDate = (value) => {
-  const iso = toISODate(value);
-  return iso || value || "";
-};
+const displayDate = (value) => toISODate(value);
 
 const safeToday = () => {
-  try {
-    return new Date().toISOString().split("T")[0];
-  } catch {
-    return String(Date.now());
-  }
+  const ahora = new Date();
+  const y = ahora.getFullYear();
+  const m = String(ahora.getMonth() + 1).padStart(2, "0");
+  const d = String(ahora.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 };
 
 export default function FlightTable({ refreshTrigger, onEdit }) {
@@ -69,11 +69,8 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
   const [filterMatricula, setFilterMatricula] = useState("");
   const [filterPersona, setFilterPersona] = useState("");
   const [filterFecha, setFilterFecha] = useState("");
-
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
-
-  // Modal interno (fallback si no viene onEdit) -> SOLO PARA EDITAR
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFlight, setSelectedFlight] = useState(null);
 
@@ -89,17 +86,7 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
   }, []);
 
   useEffect(() => {
-    let ignore = false;
-
-    const run = async () => {
-      if (!ignore) await fetchFlights();
-    };
-
-    run();
-
-    return () => {
-      ignore = true;
-    };
+    fetchFlights();
   }, [fetchFlights, refreshTrigger]);
 
   const filteredFlights = useMemo(() => {
@@ -111,17 +98,14 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
       const fMat = (f.matricula || "").toLowerCase();
       const fReg = String(f.nroRegistro || "").toLowerCase();
       const matchMatricula = fMat.includes(mat) || fReg.includes(mat);
-
       const matchPersona =
         per === "" ||
         (Array.isArray(f.personas) &&
           f.personas.some((p) =>
             (p.apellidoNombre || "").toLowerCase().includes(per)
           ));
-
       let matchFecha = true;
       if (filterFechaISO) matchFecha = toISODate(f.fecha) === filterFechaISO;
-
       return matchMatricula && matchPersona && matchFecha;
     });
   }, [flights, filterMatricula, filterPersona, filterFecha]);
@@ -135,18 +119,9 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
     setCurrentPage(1);
   }, [filterMatricula, filterPersona, filterFecha]);
 
-  useEffect(() => {
-    setCurrentPage((prev) => {
-      if (prev < 1) return 1;
-      if (prev > totalPages) return totalPages;
-      return prev;
-    });
-  }, [totalPages]);
-
   const stats = useMemo(() => {
     let totalPax = 0;
     let totalTrip = 0;
-
     filteredFlights.forEach((f) => {
       if (f.estado !== "ANULADO") {
         f.personas?.forEach((p) => {
@@ -155,7 +130,6 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
         });
       }
     });
-
     return { totalPax, totalTrip, totalVuelos: filteredFlights.length };
   }, [filteredFlights]);
 
@@ -171,57 +145,157 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
 
   const openLocalEditModal = useCallback(async (flight) => {
     if (!flight?._id) return;
-
-    // Abrimos ya con lo del listado
     setSelectedFlight(flight);
     setIsModalOpen(true);
-
-    // Intentamos traer el registro completo (si backend soporta GET /flights/:id)
     try {
       const res = await api.get(`/flights/${flight._id}`);
-      const full = res?.data;
-
-      if (full && full._id) {
-        setSelectedFlight(full);
-      }
+      if (res?.data?._id) setSelectedFlight(res.data);
     } catch (err) {
-      const status = err?.response?.status;
-      if (status !== 404) {
-        console.warn("[FlightTable] No se pudo traer flight por ID:", err);
-      }
-      // Si 404, seguimos con el flight del listado sin romper
+      console.warn("Error cargando detalle:", err);
     }
   }, []);
 
   const handleEditClick = useCallback(
     (flight) => {
-      if (!flight) return;
-      if (flight.estado === "ANULADO") return;
-
+      if (!flight || flight.estado === "ANULADO") return;
       if (typeof onEdit === "function") {
         onEdit(flight);
         return;
       }
-
       openLocalEditModal(flight);
     },
     [onEdit, openLocalEditModal]
   );
 
-  useEffect(() => {
-    if (!isModalOpen) return;
+  const exportarExcel = () => {
+    const dataParaExcel = [];
 
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") handleCloseModal();
-    };
+    filteredFlights.forEach((f) => {
+      (f.personas || []).forEach((p) => {
+        dataParaExcel.push({
+          "Nº REGISTRO": f.nroRegistro || "S/N",
+          ESTADO: f.estado || "ACTIVO",
+          FECHA: displayDate(f.fecha),
+          HORA: f.hora,
+          MATRÍCULA: (f.matricula || "").toUpperCase(),
+          MOVIMIENTO: (f.tipoMovimiento || "").toUpperCase(),
+          "ORIGEN/DESTINO": (f.tipoMovimiento === "ARRIBO"
+            ? f.procedencia
+            : f.destino || ""
+          ).toUpperCase(),
+          TIPO: p.tripPax === "T" ? "TRIPULANTE" : "PASAJERO",
+          "APELLIDO Y NOMBRE": (p.apellidoNombre || "").toUpperCase(),
+          NACIONALIDAD: (p.nacionalidad || "ARG").toUpperCase(),
+          "TIPO DOC": (p.tipoDocumento || "DNI").toUpperCase(),
+          "NRO DOC": p.nroDni,
+          OBSERVACIONES: (f.observaciones || "").toUpperCase(),
+          OFICIAL: `${f.gradoOficial || ""} ${f.nombreOficial || ""}`
+            .trim()
+            .toUpperCase(),
+        });
+      });
+    });
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isModalOpen, handleCloseModal]);
+    const ws = XLSX.utils.json_to_sheet(dataParaExcel);
+
+    ws["!cols"] = Array(14).fill({ wch: 20 });
+    ws["!rows"] = Array(dataParaExcel.length + 1).fill({ hpt: 22 });
+
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cell = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cell]) continue;
+
+        if (R === 0) {
+          ws[cell].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "0F172A" } },
+            alignment: { horizontal: "center", vertical: "center" },
+            border: {
+              top: { style: "thin" },
+              bottom: { style: "thin" },
+              left: { style: "thin" },
+              right: { style: "thin" },
+            },
+          };
+        } else {
+          ws[cell].s = {
+            alignment: { horizontal: "center", vertical: "center" },
+            fill: {
+              fgColor: { rgb: R % 2 === 0 ? "F1F5F9" : "FFFFFF" },
+            },
+            border: {
+              top: { style: "thin" },
+              bottom: { style: "thin" },
+              left: { style: "thin" },
+              right: { style: "thin" },
+            },
+          };
+        }
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Reporte_SMA");
+    XLSX.writeFile(wb, `Reporte_SMA_${safeToday()}.xlsx`);
+  };
+
+  const exportarPDF = () => {
+    const doc = new jsPDF({ orientation: "landscape" });
+    const tableRows = [];
+    filteredFlights.forEach((f) => {
+      (f.personas || []).forEach((p) => {
+        tableRows.push([
+          f.nroRegistro || "-",
+          f.estado === "ANULADO"
+            ? `${displayDate(f.fecha)} (ANULADO)`
+            : displayDate(f.fecha),
+          f.hora,
+          f.matricula,
+          f.tipoMovimiento,
+          f.tipoMovimiento === "ARRIBO" ? f.procedencia : f.destino,
+          p.tripPax === "T" ? "TRIP" : "PAX",
+          p.apellidoNombre,
+          p.nacionalidad || "ARG",
+          p.tipoDocumento || "DNI",
+          p.nroDni,
+          f.observaciones || "-",
+          `${f.gradoOficial} ${f.nombreOficial}`,
+        ]);
+      });
+    });
+
+    autoTable(doc, {
+      head: [
+        [
+          "Nº REG",
+          "FECHA",
+          "HORA",
+          "MATRÍCULA",
+          "MOV.",
+          "ORIG/DEST",
+          "TIPO",
+          "NOMBRE",
+          "NAC.",
+          "DOC",
+          "NÚMERO",
+          "OBS.",
+          "OFICIAL",
+        ],
+      ],
+      body: tableRows,
+      theme: "grid",
+      styles: { fontSize: 5.5, cellPadding: 1 },
+      headStyles: { fillColor: [15, 23, 42] },
+    });
+
+    doc.save(`Reporte_SMA_General_${safeToday()}.pdf`);
+  };
 
   const descargarVueloUnicoPDF = (f) => {
     const doc = new jsPDF({ orientation: "landscape" });
-
     const tableRows = (f.personas || []).map((p) => [
       f.nroRegistro || "-",
       f.estado === "ANULADO"
@@ -272,7 +346,7 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
   const anularVuelo = async (id) => {
     const result = await Swal.fire({
       title: '<span style="color: #f1f5f9">¿Anular registro?</span>',
-      text: "El registro permanecerá en la base de datos pero se marcará como INVÁLIDO.",
+      text: "El registro se marcará como INVÁLIDO en el sistema.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#f59e0b",
@@ -286,118 +360,29 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
     if (result.isConfirmed) {
       try {
         await api.put(`/flights/${id}`, { estado: "ANULADO" });
-
-        setFlights((prev) =>
-          prev.map((f) => (f._id === id ? { ...f, estado: "ANULADO" } : f))
-        );
-
+        await fetchFlights();
         Swal.fire({
           icon: "success",
-          title: "Registro Anulado",
-          timer: 1500,
-          showConfirmButton: false,
+          title: "Anulado",
           background: "#0f172a",
           color: "#f1f5f9",
+          timer: 1500,
+          showConfirmButton: false,
         });
+      // eslint-disable-next-line no-unused-vars
       } catch (error) {
-        console.error("Error al anular:", error);
-        Swal.fire("Error", "No se pudo anular el registro", "error");
+        Swal.fire("Error", "No se pudo anular", "error");
       }
     }
   };
-
-  const exportarExcel = () => {
-    const dataParaExcel = [];
-
-    filteredFlights.forEach((f) => {
-      (f.personas || []).forEach((p) => {
-        dataParaExcel.push({
-          "Nº REGISTRO": f.nroRegistro || "S/N",
-          ESTADO: f.estado || "ACTIVO",
-          FECHA: displayDate(f.fecha),
-          HORA: f.hora,
-          MATRÍCULA: f.matricula,
-          MOVIMIENTO: f.tipoMovimiento,
-          "ORIGEN/DESTINO":
-            f.tipoMovimiento === "ARRIBO" ? f.procedencia : f.destino,
-          TIPO: p.tripPax === "T" ? "TRIPULANTE" : "PASAJERO",
-          "APELLIDO Y NOMBRE": p.apellidoNombre,
-          NACIONALIDAD: p.nacionalidad || "ARG",
-          "TIPO DOC": p.tipoDocumento || "DNI",
-          "NRO DOC": p.nroDni,
-          OBSERVACIONES: f.observaciones || "",
-          OFICIAL: `${f.gradoOficial} ${f.nombreOficial}`,
-        });
-      });
-    });
-
-    const ws = XLSX.utils.json_to_sheet(dataParaExcel);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Vuelos");
-    XLSX.writeFile(wb, `Reporte_SMA_${safeToday()}.xlsx`);
-  };
-
-  const exportarPDF = () => {
-    const doc = new jsPDF({ orientation: "landscape" });
-    const tableRows = [];
-
-    filteredFlights.forEach((f) => {
-      (f.personas || []).forEach((p) => {
-        tableRows.push([
-          f.nroRegistro || "-",
-          f.estado === "ANULADO"
-            ? `${displayDate(f.fecha)} (ANULADO)`
-            : displayDate(f.fecha),
-          f.hora,
-          f.matricula,
-          f.tipoMovimiento,
-          f.tipoMovimiento === "ARRIBO" ? f.procedencia : f.destino,
-          p.tripPax === "T" ? "TRIP" : "PAX",
-          p.apellidoNombre,
-          p.nacionalidad || "ARG",
-          p.tipoDocumento || "DNI",
-          p.nroDni,
-          f.observaciones || "-",
-          `${f.gradoOficial} ${f.nombreOficial}`,
-        ]);
-      });
-    });
-
-    autoTable(doc, {
-      head: [
-        [
-          "Nº REG",
-          "FECHA",
-          "HORA",
-          "MATRÍCULA",
-          "MOV.",
-          "ORIG/DEST",
-          "TIPO",
-          "NOMBRE",
-          "NAC.",
-          "DOC",
-          "NÚMERO",
-          "OBS.",
-          "OFICIAL",
-        ],
-      ],
-      body: tableRows,
-      theme: "grid",
-      styles: { fontSize: 5.5, cellPadding: 1 },
-      headStyles: { fillColor: [15, 23, 42] },
-    });
-
-    doc.save(`Reporte_SMA_General_${safeToday()}.pdf`);
-  };
-
   return (
     <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto p-2">
-      {/* MODAL INTERNO (fallback) */}
+      {/* MODAL PARA EDITAR */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-slate-800 p-2 rounded-2xl w-full max-w-4xl shadow-2xl my-auto">
             <div className="p-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-white uppercase tracking-tight">
+              <h2 className="text-xl font-bold text-white uppercase">
                 Editar Registro SMA
               </h2>
               <button
@@ -407,7 +392,6 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
                 ESC / CERRAR
               </button>
             </div>
-
             <div className="max-h-[80vh] overflow-y-auto rounded-xl">
               <FlightForm
                 flightToEdit={selectedFlight}
@@ -419,11 +403,11 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
         </div>
       )}
 
-      {/* SECCIÓN DE FILTROS Y ESTADÍSTICAS */}
+      {/* FILTROS Y ESTADÍSTICAS */}
       <div className="bg-slate-900/40 backdrop-blur-md p-6 border border-slate-800 rounded-2xl shadow-2xl">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div className="w-full md:col-span-1">
-            <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2 block ml-1">
+          <div>
+            <label className="text-[10px] text-slate-500 font-black uppercase mb-2 block ml-1">
               Aeronave / Nº Registro
             </label>
             <div className="relative">
@@ -440,9 +424,8 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
               />
             </div>
           </div>
-
-          <div className="w-full md:col-span-1">
-            <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2 block ml-1">
+          <div>
+            <label className="text-[10px] text-slate-500 font-black uppercase mb-2 block ml-1">
               Persona (Nombre)
             </label>
             <div className="relative">
@@ -459,9 +442,8 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
               />
             </div>
           </div>
-
-          <div className="w-full md:col-span-1">
-            <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2 block ml-1">
+          <div>
+            <label className="text-[10px] text-slate-500 font-black uppercase mb-2 block ml-1">
               Fecha
             </label>
             <input
@@ -471,24 +453,23 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
               onChange={(e) => setFilterFecha(e.target.value)}
             />
           </div>
-
-          <div className="flex gap-2 md:col-span-1">
+          <div className="flex gap-2">
             <button
               onClick={exportarPDF}
-              className="flex-1 bg-rose-600 hover:bg-rose-500 text-white h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all shadow-lg shadow-rose-900/20"
+              className="flex-1 bg-rose-600 hover:bg-rose-500 text-white h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all shadow-lg"
             >
               <FileText size={16} /> PDF
             </button>
-
             <button
               onClick={exportarExcel}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all shadow-lg shadow-emerald-900/20"
+              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all shadow-lg"
             >
               <TableIcon size={16} /> EXCEL
             </button>
           </div>
         </div>
 
+        {/* ESTADÍSTICAS RÁPIDAS */}
         <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-800/50">
           <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800 flex items-center gap-4">
             <div className="p-2 bg-blue-500/10 rounded-lg">
@@ -503,7 +484,6 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
               </p>
             </div>
           </div>
-
           <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800 flex items-center gap-4">
             <div className="p-2 bg-emerald-500/10 rounded-lg">
               <UserCheck size={20} className="text-emerald-500" />
@@ -515,7 +495,6 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
               <p className="text-xl font-black text-white">{stats.totalPax}</p>
             </div>
           </div>
-
           <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800 flex items-center gap-4">
             <div className="p-2 bg-amber-500/10 rounded-lg">
               <Users size={20} className="text-amber-500" />
@@ -530,164 +509,116 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
         </div>
       </div>
 
-      {/* TABLA */}
+      {/* TABLA DE RESULTADOS */}
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-950/40 text-blue-400 text-[10px] uppercase tracking-widest font-black border-b border-slate-800">
+              <tr className="bg-slate-950/40 text-blue-400 text-[10px] uppercase font-black border-b border-slate-800">
                 <th className="p-5">Nº Registro</th>
                 <th className="p-5">Fecha / Hora</th>
                 <th className="p-5">Matrícula</th>
                 <th className="p-5">Movimiento</th>
                 <th className="p-5">Manifiesto</th>
-                <th className="p-5">Observaciones</th>
                 <th className="p-5 text-center">Acciones</th>
               </tr>
             </thead>
-
             <tbody className="divide-y divide-slate-800/50">
-              {currentItems.length > 0 ? (
-                currentItems.map((f) => (
-                  <tr
-                    key={f._id}
-                    className={`transition-all ${
-                      f.estado === "ANULADO"
-                        ? "bg-red-950/10 opacity-50 grayscale"
-                        : "hover:bg-blue-500/5"
-                    }`}
-                  >
-                    <td className="p-5 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <Hash size={14} className="text-slate-600" />
-                        <span className="font-mono font-bold text-blue-400 text-sm">
-                          {f.nroRegistro || "S/N"}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="p-5 whitespace-nowrap">
-                      <div className="font-bold text-slate-200 text-sm">
-                        {displayDate(f.fecha)}
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-mono mt-1">
-                        {f.hora} HS
-                      </div>
-                    </td>
-
-                    <td className="p-5 font-black text-slate-200 text-base">
-                      {f.matricula}
-                      {f.estado === "ANULADO" && (
-                        <span className="block text-[8px] text-red-500 tracking-tighter">
-                          REGISTRO ANULADO
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="p-5">
-                      <span
-                        className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
-                          f.tipoMovimiento === "ARRIBO"
-                            ? "bg-blue-500/10 text-blue-400"
-                            : "bg-amber-500/10 text-amber-500"
-                        }`}
-                      >
-                        {f.tipoMovimiento}
+              {currentItems.map((f) => (
+                <tr
+                  key={f._id}
+                  className={`transition-all ${
+                    f.estado === "ANULADO"
+                      ? "bg-red-950/10 opacity-50 grayscale"
+                      : "hover:bg-blue-500/5"
+                  }`}
+                >
+                  <td className="p-5 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <Hash size={14} className="text-slate-600" />
+                      <span className="font-mono font-bold text-blue-400 text-sm">
+                        {f.nroRegistro || "S/N"}
                       </span>
-                    </td>
-
-                    <td className="p-5">
-                      <div className="flex items-center gap-2 text-slate-200 font-bold text-[11px] uppercase">
-                        <Users size={14} className="text-blue-500 shrink-0" />
-                        {f.personas?.length || 0} Pers.
-                      </div>
-                    </td>
-
-                    <td className="p-5">
-                      <div className="flex items-start gap-2 max-w-45">
-                        <MessageSquare
-                          size={14}
-                          className={`shrink-0 mt-0.5 ${
-                            f.observaciones
-                              ? "text-amber-500"
-                              : "text-slate-700"
-                          }`}
-                        />
-                        <p className="text-[10px] text-slate-400 uppercase italic line-clamp-2 leading-tight">
-                          {f.observaciones || "Sin novedades"}
-                        </p>
-                      </div>
-                    </td>
-
-                    <td className="p-5 text-center">
-                      <div className="flex justify-center gap-2">
-                        {f.estado !== "ANULADO" && (
-                          <>
-                            <button
-                              onClick={() => descargarVueloUnicoPDF(f)}
-                              className="text-emerald-500 hover:bg-emerald-500/10 p-2 rounded-lg transition-all"
-                              title="Descargar"
-                            >
-                              <Download size={18} />
-                            </button>
-
-                            <button
-                              onClick={() => handleEditClick(f)}
-                              className="text-slate-400 hover:text-blue-400 p-2 rounded-lg hover:bg-blue-500/10"
-                              title="Editar"
-                            >
-                              <Edit3 size={18} />
-                            </button>
-
-                            <button
-                              onClick={() => anularVuelo(f._id)}
-                              className="text-slate-400 hover:text-orange-500 p-2 rounded-lg hover:bg-orange-500/10"
-                              title="Anular"
-                            >
-                              <Ban size={18} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan="7"
-                    className="p-20 text-center text-slate-500 uppercase text-xs font-black tracking-[0.2em]"
-                  >
-                    No se encontraron registros
+                    </div>
+                  </td>
+                  <td className="p-5 whitespace-nowrap">
+                    <div className="font-bold text-slate-200 text-sm">
+                      {displayDate(f.fecha)}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-1">
+                      {f.hora} HS
+                    </div>
+                  </td>
+                  <td className="p-5 font-black text-slate-200 text-base">
+                    {f.matricula}
+                  </td>
+                  <td className="p-5">
+                    <span
+                      className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
+                        f.tipoMovimiento === "ARRIBO"
+                          ? "bg-blue-500/10 text-blue-400"
+                          : "bg-amber-500/10 text-amber-500"
+                      }`}
+                    >
+                      {f.tipoMovimiento}
+                    </span>
+                  </td>
+                  <td className="p-5">
+                    <div className="text-slate-200 font-bold text-[11px] uppercase">
+                      {f.personas?.length || 0} Pers.
+                    </div>
+                  </td>
+                  <td className="p-5 text-center">
+                    <div className="flex justify-center gap-2">
+                      {f.estado !== "ANULADO" && (
+                        <>
+                          <button
+                            onClick={() => descargarVueloUnicoPDF(f)}
+                            className="text-emerald-500 hover:bg-emerald-500/10 p-2 rounded-lg"
+                            title="Descargar"
+                          >
+                            <Download size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleEditClick(f)}
+                            className="text-slate-400 hover:text-blue-400 p-2 rounded-lg"
+                            title="Editar"
+                          >
+                            <Edit3 size={18} />
+                          </button>
+                          <button
+                            onClick={() => anularVuelo(f._id)}
+                            className="text-slate-400 hover:text-orange-500 p-2 rounded-lg"
+                            title="Anular"
+                          >
+                            <Ban size={18} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>
 
         {/* PAGINACIÓN */}
         <div className="p-4 bg-slate-950/40 border-t border-slate-800 flex items-center justify-between">
-          <div className="flex flex-col">
-            <span className="text-[10px] text-slate-500 font-black uppercase">
-              Página {currentPage} de {totalPages}
-            </span>
-            <span className="text-[9px] text-blue-500/50 font-bold">
-              {filteredFlights.length} resultados
-            </span>
-          </div>
-
+          <span className="text-[10px] text-slate-500 font-black uppercase">
+            Página {currentPage} de {totalPages}
+          </span>
           <div className="flex items-center gap-3">
             <button
               disabled={currentPage === 1}
-              onClick={() => setCurrentPage((prev) => prev - 1)}
+              onClick={() => setCurrentPage((p) => p - 1)}
               className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-blue-400 disabled:opacity-10 transition-all"
             >
               <ChevronLeft size={18} />
             </button>
             <button
               disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage((prev) => prev + 1)}
+              onClick={() => setCurrentPage((p) => p + 1)}
               className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-blue-400 disabled:opacity-10 transition-all"
             >
               <ChevronRight size={18} />
