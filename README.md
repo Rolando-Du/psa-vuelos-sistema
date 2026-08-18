@@ -4,56 +4,120 @@
 
 ### Gestión de movimientos, arribos y partidas con autenticación y panel operativo
 
-![React](https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
-![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=for-the-badge&logo=vite&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white)
-![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-47A248?style=for-the-badge&logo=mongodb&logoColor=white)
+[![React](https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Rolando-Du/psa-vuelos-sistema/ci.yml?branch=master&style=for-the-badge&label=CI)](https://github.com/Rolando-Du/psa-vuelos-sistema/actions)
 
 </div>
 
 ---
 
-## 📌 Descripción
+## Descripción
 
-Aplicación full stack para el **registro, consulta y administración de movimientos de vuelos**. El sistema cuenta con autenticación de usuarios, rutas protegidas, carga de movimientos, planilla histórica y un dashboard con indicadores de actividad.
+Aplicación full stack para el **registro, consulta y administración de movimientos de vuelos**.
 
-La interfaz fue desarrollada con React, Vite y Tailwind CSS, mientras que el backend utiliza Node.js, Express y MongoDB mediante Mongoose.
+El sistema cuenta con autenticación, rutas protegidas, carga y edición de movimientos, planilla histórica, búsquedas específicas y un dashboard con indicadores de actividad.
 
 ---
 
-## 🚀 Funcionalidades principales
+## Funcionalidades
 
 - Inicio de sesión y registro de usuarios.
-- Autenticación mediante JWT.
-- Rutas protegidas en el frontend.
+- Autenticación JWT.
+- Rutas protegidas.
 - Registro de movimientos de vuelos.
 - Consulta completa de registros.
-- Edición y eliminación de movimientos.
-- Obtención de un vuelo por ID.
+- Obtención por ID.
+- Edición y eliminación.
 - Búsqueda por DNI.
 - Búsqueda por matrícula.
 - Búsqueda por nombre de oficial.
-- Gestión de estados de los vuelos.
-- Panel con estadísticas de movimientos.
+- Gestión de estados.
+- Dashboard con total de movimientos.
 - Conteo de arribos y partidas.
 - Planilla de registros desplegable.
-- Interfaz responsive con diseño oscuro.
+- Exportación y herramientas documentales disponibles mediante dependencias del proyecto.
+- Interfaz responsive.
+- CI con GitHub Actions.
 
 ---
 
-## 🧩 Arquitectura
+## Stack
+
+### Frontend
+
+```text
+React 19
+Vite 7
+Tailwind CSS
+React Router
+Axios
+Lucide React
+SweetAlert2
+ESLint
+```
+
+### Backend
+
+```text
+Node.js
+Express 5
+MongoDB
+Mongoose
+JWT
+bcryptjs
+CORS
+dotenv
+```
+
+### Documentos y exportación
+
+```text
+ExcelJS
+XLSX
+FileSaver
+jsPDF
+jsPDF AutoTable
+```
+
+---
+
+## Arquitectura
+
+```text
+Usuario
+  ↓
+React + Router
+  ↓
+Auth Context / Hooks / Components
+  ↓
+API REST
+  ↓
+Express
+  ↓
+Controllers / Models
+  ↓
+MongoDB
+```
+
+---
+
+## Estructura
 
 ```text
 psa-vuelos-sistema/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── backend/
 │   ├── src/
 │   │   ├── controllers/
 │   │   ├── routes/
-│   │   ├── models/
-│   │   └── server.js
-│   └── package.json
-│
+│   │   └── models/
+│   ├── package.json
+│   └── package-lock.json
 ├── frontend/
 │   ├── src/
 │   │   ├── api/
@@ -62,68 +126,61 @@ psa-vuelos-sistema/
 │   │   ├── context/
 │   │   ├── hooks/
 │   │   ├── pages/
-│   │   ├── services/
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   └── package.json
-│
+│   │   └── services/
+│   ├── package.json
+│   └── package-lock.json
+├── SECURITY.md
 └── README.md
 ```
 
 ---
 
-## 🛠️ Stack tecnológico
+## Instalación
 
-### Frontend
-
-- React 19
-- Vite
-- Tailwind CSS
-- React Router
-- Axios
-- Lucide React
-- SweetAlert2
-- date-fns / Moment
+```bash
+git clone https://github.com/Rolando-Du/psa-vuelos-sistema.git
+cd psa-vuelos-sistema
+```
 
 ### Backend
 
-- Node.js
-- Express 5
-- MongoDB
-- Mongoose
-- JWT
-- bcryptjs
-- CORS
-- dotenv
+```bash
+cd backend
+npm ci
+```
 
-### Exportación y documentos
+Crear un archivo `.env` con la configuración local de MongoDB y JWT. No versionar este archivo.
 
-El proyecto incluye dependencias preparadas para trabajar con archivos y reportes:
+Ejecutar:
 
-- ExcelJS
-- XLSX
-- FileSaver
-- jsPDF
-- jsPDF AutoTable
+```bash
+npm run dev
+```
+
+### Frontend
+
+En otra terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
 
 ---
 
-## 🔐 Autenticación
-
-El backend expone las siguientes rutas principales:
+## Rutas de autenticación
 
 ```text
 POST /api/auth/login
 POST /api/auth/register
 ```
 
-El frontend utiliza contexto de autenticación y un componente `ProtectedRoute` para restringir el acceso al dashboard.
+El frontend utiliza contexto de autenticación y `ProtectedRoute` para restringir el dashboard.
 
 ---
 
-## ✈️ API de vuelos
-
-Las rutas disponibles incluyen:
+## API de vuelos
 
 ```text
 GET    /api/flights
@@ -139,9 +196,9 @@ GET /api/flights/search/oficial/:nombre
 
 ---
 
-## 📊 Dashboard
+## Dashboard
 
-El dashboard calcula indicadores en tiempo real a partir de los registros activos:
+El dashboard muestra indicadores derivados de los registros activos:
 
 ```text
 Total de movimientos
@@ -149,49 +206,11 @@ Arribos
 Partidas
 ```
 
-Los vuelos con estado `ANULADO` no se incluyen dentro de las estadísticas activas.
+Los registros con estado `ANULADO` no se contabilizan como movimientos activos.
 
 ---
 
-## 💻 Instalación local
-
-### 1. Clonar el repositorio
-
-```bash
-git clone https://github.com/Rolando-Du/psa-vuelos-sistema.git
-cd psa-vuelos-sistema
-```
-
-### 2. Backend
-
-```bash
-cd backend
-npm install
-```
-
-Crear el archivo `.env` con las variables necesarias para la conexión a MongoDB y autenticación.
-
-Ejecutar en desarrollo:
-
-```bash
-npm run dev
-```
-
-### 3. Frontend
-
-En otra terminal:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Vite iniciará el frontend en el puerto configurado para desarrollo.
-
----
-
-## 📜 Scripts
+## Scripts
 
 ### Backend
 
@@ -204,48 +223,59 @@ npm start
 
 ```bash
 npm run dev
-npm run build
 npm run lint
+npm run build
 npm run preview
 ```
 
 ---
 
-## 🔒 Seguridad
+## CI
 
-El proyecto utiliza:
+GitHub Actions valida automáticamente cada push y pull request a `master`:
 
-- Hash de contraseñas con bcryptjs.
-- Tokens JWT.
-- Rutas protegidas en frontend.
-- Variables de entorno para configuración sensible.
-- CORS en el backend.
+```text
+Frontend → npm ci + lint + build
+Backend  → npm ci
+```
 
-Los archivos `.env` no deben subirse al repositorio.
+El workflow evita integrar cambios del frontend que no pasen las validaciones básicas de calidad y compilación.
 
 ---
 
-## 🎯 Estado del proyecto
+## Seguridad
 
-El sistema cuenta actualmente con:
+- No versionar `.env`.
+- Mantener la conexión a MongoDB y los secretos JWT fuera del repositorio.
+- No utilizar información real de personas o vuelos en ejemplos públicos.
+- Revisar rutas protegidas y permisos antes de desplegar.
+- Mantener dependencias actualizadas.
+
+La política completa está disponible en **[SECURITY.md](./SECURITY.md)**.
+
+---
+
+## Estado
 
 ```text
 ✓ autenticación
+✓ rutas protegidas
 ✓ dashboard
 ✓ registro de vuelos
-✓ historial de movimientos
+✓ historial
 ✓ arribos y partidas
 ✓ búsquedas específicas
-✓ actualización de registros
-✓ eliminación de registros
+✓ edición
+✓ eliminación
 ✓ frontend responsive
-✓ backend REST
-✓ persistencia MongoDB
+✓ API REST
+✓ MongoDB
+✓ CI
 ```
 
 ---
 
-## 👨‍💻 Autor
+## Autor
 
 Desarrollado por **Rolando Duarte**.
 
