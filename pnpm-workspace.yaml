@@ -2,6 +2,10 @@ packages:
   - frontend
   - backend
 allowBuilds:
+  '@prisma/engines': true
   '@swc/core': true
   core-js: true
   esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  workerd: true

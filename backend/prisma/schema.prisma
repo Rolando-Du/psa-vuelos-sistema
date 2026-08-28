@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TipoDocumento {
+  DNI
+  PASAPORTE
+  CEDULA
+}
+
+enum TripPax {
+  T
+  P
+}
+
+enum TipoMovimiento {
+  ARRIBO
+  PARTIDA
+}
+
+enum EstadoVuelo {
+  ACTIVO
+  ANULADO
+}
+
+enum UserRole {
+  admin
+  oficial
+}
+
+model User {
+  id       String   @id @default(uuid())
+  username String   @unique
+  password String
+  nombre   String
+  lup      String   @unique
+  role     UserRole @default(oficial)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Officer {
+  id     String @id @default(uuid())
+  grado  String
+  nombre String
+  lup    String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nombre])
+}
+
+model Flight {
+  id          String @id @default(uuid())
+  nroRegistro String @unique
+
+  fecha DateTime @db.Date
+  hora  DateTime @db.Time(0)
+
+  matricula    String
+  tipoAeronave String
+  propietario  String @default("")
+  procedencia  String @default("")
+  destino      String @default("")
+
+  tipoMovimiento TipoMovimiento
+
+  gradoOficial  String
+  nombreOficial String
+  lupOficial    String
+
+  observaciones String      @default("")
+  estado        EstadoVuelo @default(ACTIVO)
+
+  personas FlightPerson[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([matricula])
+  @@index([fecha])
+  @@index([tipoMovimiento])
+  @@index([estado])
+}
+
+model FlightPerson {
+  id             String        @id @default(uuid())
+  apellidoNombre String
+  tipoDocumento  TipoDocumento @default(DNI)
+  nroDni         String
+  tripPax        TripPax       @default(T)
+  nacionalidad   String        @default("ARG")
+  equipajeMano   Int           @default(0)
+  equipajeBodega Int           @default(0)
+
+  flightId String
+  flight   Flight @relation(fields: [flightId], references: [id], onDelete: Cascade)
+
+  @@index([nroDni])
+  @@index([flightId])
+}
+
+model Counter {
+  id  String @id
+  seq Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Send,
   UserPlus,
@@ -12,31 +12,25 @@ import {
 import api from "../api/axios";
 import Swal from "sweetalert2";
 
-/* ─────────────────────────────────────────────────────────────
-   Helpers de fecha (para que el input date SIEMPRE funcione)
-   - Si te llega "DD/MM/YYYY" lo convierte a "YYYY-MM-DD"
-   - Si ya viene "YYYY-MM-DD" lo deja igual
-───────────────────────────────────────────────────────────── */
 const todayISO = () => new Date().toISOString().split("T")[0];
 
 const normalizeDateForInput = (value) => {
   if (!value) return "";
-  // yyyy-mm-dd
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  // dd/mm/yyyy
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
     const [d, m, y] = value.split("/");
     return `${y}-${m}-${d}`;
   }
+
   return value;
 };
 
-// Lo que mandamos al backend (en ISO)
 const normalizeDateForAPI = (value) => normalizeDateForInput(value);
 
-/* ─────────────────────────────────────────────────────────────
-   Estado inicial
-───────────────────────────────────────────────────────────── */
 const initialState = {
   fecha: todayISO(),
   hora: "",
@@ -52,92 +46,209 @@ const initialState = {
   observaciones: "",
 };
 
-const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
-  const [formData, setFormData] = useState(initialState);
-  const [listaPersonas, setListaPersonas] = useState([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+const initialPersona = {
+  apellidoNombre: "",
+  tipoDocumento: "DNI",
+  nroDni: "",
+  tripPax: "T",
+  equipajeMano: 0,
+  equipajeBodega: 0,
+  nacionalidad: "ARG",
+};
 
-  // Autocompletado de personas (histórico)
-  const [historicoPersonas, setHistoricoPersonas] = useState([]);
+const buildInitialFormData = (flightToEdit) => {
+  if (!flightToEdit) {
+    return {
+      ...initialState,
+      fecha: todayISO(),
+    };
+  }
+
+  return {
+    fecha:
+      normalizeDateForInput(flightToEdit.fecha) || todayISO(),
+    hora: flightToEdit.hora || "",
+    matricula: flightToEdit.matricula || "",
+    tipoAeronave: flightToEdit.tipoAeronave || "",
+    propietario: flightToEdit.propietario || "",
+    procedencia: flightToEdit.procedencia || "",
+    destino: flightToEdit.destino || "",
+    tipoMovimiento: flightToEdit.tipoMovimiento || "ARRIBO",
+    gradoOficial: flightToEdit.gradoOficial || "AYUDANTE",
+    nombreOficial: flightToEdit.nombreOficial || "",
+    lupOficial: flightToEdit.lupOficial || "",
+    observaciones: flightToEdit.observaciones || "",
+  };
+};
+
+const buildInitialPersonas = (flightToEdit) => {
+  if (!flightToEdit?.personas) {
+    return [];
+  }
+
+  return flightToEdit.personas.map((persona) => ({
+    ...persona,
+    equipajeMano: Number(persona.equipajeMano || 0),
+    equipajeBodega: Number(persona.equipajeBodega || 0),
+  }));
+};
+
+const FlightFormContent = ({
+  onFlightAdded,
+  flightToEdit,
+  clearEdit,
+}) => {
+  const [formData, setFormData] = useState(() =>
+    buildInitialFormData(flightToEdit)
+  );
+
+  const [listaPersonas, setListaPersonas] = useState(() =>
+    buildInitialPersonas(flightToEdit)
+  );
 
   const [personaActual, setPersonaActual] = useState({
-    apellidoNombre: "",
-    tipoDocumento: "DNI",
-    nroDni: "",
-    tripPax: "T",
-    equipajeMano: 0,
-    equipajeBodega: 0,
-    nacionalidad: "ARG",
+    ...initialPersona,
   });
 
-  /* ─────────────────────────────────────────────────────────────
-      Cargar personas previas para autocompletar
-  ───────────────────────────────────────────────────────────── */
-  const cargarPersonas = useCallback(async () => {
-    try {
-      const res = await api.get("/flights");
-      const personas = (res.data || []).flatMap((v) => v.personas || []);
-      setHistoricoPersonas(personas);
-    } catch (error) {
-      console.error("Error al obtener personas para autocompletado", error);
-    }
+  const [historicoPersonas, setHistoricoPersonas] = useState([]);
+  const [oficialesSugeridos, setOficialesSugeridos] = useState([]);
+  const [oficialSeleccionado, setOficialSeleccionado] = useState(() =>
+    Boolean(flightToEdit?.nombreOficial)
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    api
+      .get("/flights")
+      .then((res) => {
+        if (cancelled) return;
+
+        const personas = (res.data || []).flatMap(
+          (vuelo) => vuelo.personas || []
+        );
+
+        setHistoricoPersonas(personas);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+
+        console.error(
+          "Error al obtener personas para autocompletado",
+          error
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    cargarPersonas();
-  }, [onFlightAdded, cargarPersonas]);
+    if (!flightToEdit) return;
 
-  /* ─────────────────────────────────────────────────────────────
-      Si hay edición: cargamos el vuelo y NORMALIZAMOS la fecha
-      (Si te viene DD/MM/YYYY, el input date no lo entiende)
-  ───────────────────────────────────────────────────────────── */
-  useEffect(() => {
-    if (flightToEdit) {
-      setFormData({
-        fecha: normalizeDateForInput(flightToEdit.fecha) || todayISO(),
-        hora: flightToEdit.hora || "",
-        matricula: flightToEdit.matricula || "",
-        tipoAeronave: flightToEdit.tipoAeronave || "",
-        propietario: flightToEdit.propietario || "",
-        procedencia: flightToEdit.procedencia || "",
-        destino: flightToEdit.destino || "",
-        tipoMovimiento: flightToEdit.tipoMovimiento || "ARRIBO",
-        gradoOficial: flightToEdit.gradoOficial || "AYUDANTE",
-        nombreOficial: flightToEdit.nombreOficial || "",
-        lupOficial: flightToEdit.lupOficial || "",
-        observaciones: flightToEdit.observaciones || "",
-      });
-      setListaPersonas(flightToEdit.personas || []);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } else {
-      setFormData({ ...initialState, fecha: todayISO() });
-      setListaPersonas([]);
-    }
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }, [flightToEdit]);
 
-  /* ─────────────────────────────────────────────────────────────
-      Inputs del vuelo
-  ───────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (oficialSeleccionado) return;
+
+    const nombre = formData.nombreOficial.trim();
+
+    if (!nombre) return;
+
+    let cancelled = false;
+
+    const timer = setTimeout(() => {
+      api
+        .get(`/flights/search/oficial/${encodeURIComponent(nombre)}`)
+        .then((res) => {
+          if (cancelled) return;
+
+          setOficialesSugeridos(
+            Array.isArray(res.data) ? res.data : []
+          );
+        })
+        .catch((error) => {
+          if (cancelled) return;
+
+          console.error(
+            "Error al buscar oficiales para autocompletado",
+            error
+          );
+          setOficialesSugeridos([]);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [formData.nombreOficial, oficialSeleccionado]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
     if (name === "fecha") {
-      setFormData((prev) => ({ ...prev, fecha: normalizeDateForInput(value) }));
+      setFormData((prev) => ({
+        ...prev,
+        fecha: normalizeDateForInput(value),
+      }));
+
       return;
     }
 
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  /* ─────────────────────────────────────────────────────────────
-      Inputs de persona (autocompletado por documento)
-  ───────────────────────────────────────────────────────────── */
+  const handleOficialNombreChange = (e) => {
+    const value = e.target.value.toUpperCase();
+
+    setOficialSeleccionado(false);
+
+    setFormData((prev) => ({
+      ...prev,
+      nombreOficial: value,
+      lupOficial: "",
+    }));
+
+    if (!value.trim()) {
+      setOficialesSugeridos([]);
+    }
+  };
+
+  const seleccionarOficial = (oficial) => {
+    setFormData((prev) => ({
+      ...prev,
+      gradoOficial: String(
+        oficial.gradoOficial || prev.gradoOficial
+      )
+        .toUpperCase()
+        .trim(),
+      nombreOficial: String(oficial.nombreOficial || "")
+        .toUpperCase()
+        .trim(),
+      lupOficial: String(oficial.lupOficial || "").trim(),
+    }));
+
+    setOficialSeleccionado(true);
+    setOficialesSugeridos([]);
+  };
+
   const handlePersonaChange = (e) => {
     const { name, value } = e.target;
 
     if (name === "nroDni") {
       const encontrada = historicoPersonas.find(
-        (p) => (p.nroDni || "").trim() === value.trim()
+        (persona) =>
+          (persona.nroDni || "").trim() === value.trim()
       );
 
       if (encontrada) {
@@ -148,22 +259,26 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
           nacionalidad: encontrada.nacionalidad || "ARG",
           tipoDocumento: encontrada.tipoDocumento || "DNI",
         }));
+
         return;
       }
     }
 
     const finalValue = name.includes("equipaje")
-      ? parseInt(value, 10) || 0
+      ? Number(value) || 0
       : value;
 
-    setPersonaActual((prev) => ({ ...prev, [name]: finalValue }));
+    setPersonaActual((prev) => ({
+      ...prev,
+      [name]: finalValue,
+    }));
   };
 
-  /* ─────────────────────────────────────────────────────────────
-      Agregar persona al manifiesto
-  ───────────────────────────────────────────────────────────── */
   const agregarPersonaALista = () => {
-    if (!personaActual.apellidoNombre || !personaActual.nroDni) {
+    if (
+      !personaActual.apellidoNombre ||
+      !personaActual.nroDni
+    ) {
       return Swal.fire(
         "Atención",
         "Nombre y Documento obligatorios",
@@ -171,28 +286,58 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
       );
     }
 
-    setListaPersonas((prev) => [...prev, { ...personaActual }]);
+    setListaPersonas((prev) => [
+      ...prev,
+      {
+        ...personaActual,
+        equipajeMano: Number(personaActual.equipajeMano || 0),
+        equipajeBodega: Number(
+          personaActual.equipajeBodega || 0
+        ),
+      },
+    ]);
 
     setPersonaActual({
-      apellidoNombre: "",
-      tipoDocumento: "DNI",
-      nroDni: "",
-      tripPax: "T",
-      equipajeMano: 0,
-      equipajeBodega: 0,
-      nacionalidad: "ARG",
+      ...initialPersona,
     });
   };
 
-  /* ─────────────────────────────────────────────────────────────
-      Submit: normaliza TODO antes de enviar
-  ───────────────────────────────────────────────────────────── */
+  const actualizarEquipajePersona = (
+    index,
+    campo,
+    value
+  ) => {
+    const cantidad = Math.max(0, Number(value) || 0);
+
+    setListaPersonas((prev) =>
+      prev.map((persona, i) =>
+        i === index
+          ? {
+              ...persona,
+              [campo]: cantidad,
+            }
+          : persona
+      )
+    );
+  };
+
+  const eliminarPersona = (index) => {
+    setListaPersonas((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (isSubmitting) return;
 
     if (listaPersonas.length === 0) {
-      return Swal.fire("Error", "El manifiesto no puede estar vacío", "error");
+      return Swal.fire(
+        "Error",
+        "El manifiesto no puede estar vacío",
+        "error"
+      );
     }
 
     setIsSubmitting(true);
@@ -202,44 +347,89 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
         ...formData,
         fecha: normalizeDateForAPI(formData.fecha),
         hora: (formData.hora || "").trim(),
-        matricula: (formData.matricula || "").toUpperCase().trim(),
-        tipoAeronave: (formData.tipoAeronave || "").toUpperCase().trim(),
-        propietario: (formData.propietario || "").toUpperCase().trim(),
-        procedencia: (formData.procedencia || "").toUpperCase().trim(),
-        destino: (formData.destino || "").toUpperCase().trim(),
-        tipoMovimiento: (formData.tipoMovimiento || "ARRIBO")
+        matricula: (formData.matricula || "")
           .toUpperCase()
           .trim(),
-        gradoOficial: (formData.gradoOficial || "").toUpperCase().trim(),
-        nombreOficial: (formData.nombreOficial || "").toUpperCase().trim(),
-        lupOficial: (formData.lupOficial || "").toUpperCase().trim(),
-        observaciones: (formData.observaciones || "").toUpperCase().trim(),
-        personas: listaPersonas.map((p) => ({
-          ...p,
-          apellidoNombre: (p.apellidoNombre || "").toUpperCase().trim(),
-          tipoDocumento: (p.tipoDocumento || "DNI").toUpperCase().trim(),
-          nroDni: (p.nroDni || "").trim(),
-          tripPax: (p.tripPax || "T").toUpperCase().trim(),
-          nacionalidad: (p.nacionalidad || "ARG").toUpperCase().trim(),
-          equipajeMano: Number(p.equipajeMano || 0),
-          equipajeBodega: Number(p.equipajeBodega || 0),
+        tipoAeronave: (formData.tipoAeronave || "")
+          .toUpperCase()
+          .trim(),
+        propietario: (formData.propietario || "")
+          .toUpperCase()
+          .trim(),
+        procedencia: (formData.procedencia || "")
+          .toUpperCase()
+          .trim(),
+        destino: (formData.destino || "")
+          .toUpperCase()
+          .trim(),
+        tipoMovimiento: (
+          formData.tipoMovimiento || "ARRIBO"
+        )
+          .toUpperCase()
+          .trim(),
+        gradoOficial: (formData.gradoOficial || "")
+          .toUpperCase()
+          .trim(),
+        nombreOficial: (formData.nombreOficial || "")
+          .toUpperCase()
+          .trim(),
+        lupOficial: (formData.lupOficial || "").trim(),
+        observaciones: (formData.observaciones || "")
+          .toUpperCase()
+          .trim(),
+        personas: listaPersonas.map((persona) => ({
+          apellidoNombre: (
+            persona.apellidoNombre || ""
+          )
+            .toUpperCase()
+            .trim(),
+          tipoDocumento: (
+            persona.tipoDocumento || "DNI"
+          )
+            .toUpperCase()
+            .trim(),
+          nroDni: (persona.nroDni || "").trim(),
+          tripPax: (persona.tripPax || "T")
+            .toUpperCase()
+            .trim(),
+          nacionalidad: (
+            persona.nacionalidad || "ARG"
+          )
+            .toUpperCase()
+            .trim(),
+          equipajeMano: Number(
+            persona.equipajeMano || 0
+          ),
+          equipajeBodega: Number(
+            persona.equipajeBodega || 0
+          ),
         })),
       };
 
       if (flightToEdit) {
-        await api.put(`/flights/${flightToEdit._id}`, dataFinal);
-        Swal.fire({
+        await api.put(
+          `/flights/${flightToEdit._id}`,
+          dataFinal
+        );
+
+        await Swal.fire({
           icon: "success",
           title: "Actualizado",
           text: `Registro ${flightToEdit.nroRegistro} guardado.`,
           background: "#0f172a",
           color: "#fff",
         });
+
         clearEdit?.();
       } else {
-        const res = await api.post("/flights", dataFinal);
+        const res = await api.post(
+          "/flights",
+          dataFinal
+        );
+
         const nroAsignado = res.data?.nroRegistro;
-        Swal.fire({
+
+        await Swal.fire({
           icon: "success",
           title: "Registro Exitoso",
           html: `<div class="text-lg">Asignado:<br/><b class="text-blue-400 text-2xl">${
@@ -251,14 +441,27 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
       }
 
       onFlightAdded?.();
-      setFormData({ ...initialState, fecha: todayISO() });
+
+      setFormData({
+        ...initialState,
+        fecha: todayISO(),
+      });
+
       setListaPersonas([]);
+
+      setPersonaActual({
+        ...initialPersona,
+      });
+
+      setOficialesSugeridos([]);
+      setOficialSeleccionado(false);
     } catch (err) {
       Swal.fire({
         icon: "error",
         title: "Error de Servidor",
         text:
-          err.response?.data?.message || "No se pudo conectar con el servidor",
+          err.response?.data?.message ||
+          "No se pudo conectar con el servidor",
         background: "#0f172a",
         color: "#fff",
       });
@@ -269,14 +472,16 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
 
   return (
     <div className="bg-slate-900 rounded-2xl border border-blue-900/20 shadow-2xl overflow-hidden text-slate-200">
-      {/* Selector de Movimiento */}
       <div className="flex border-b border-slate-800">
         {!flightToEdit ? (
           <>
             <button
               type="button"
               onClick={() =>
-                setFormData({ ...formData, tipoMovimiento: "ARRIBO" })
+                setFormData((prev) => ({
+                  ...prev,
+                  tipoMovimiento: "ARRIBO",
+                }))
               }
               className={`flex-1 py-4 font-black tracking-widest transition-all ${
                 formData.tipoMovimiento === "ARRIBO"
@@ -286,10 +491,14 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
             >
               ARRIBOS
             </button>
+
             <button
               type="button"
               onClick={() =>
-                setFormData({ ...formData, tipoMovimiento: "PARTIDA" })
+                setFormData((prev) => ({
+                  ...prev,
+                  tipoMovimiento: "PARTIDA",
+                }))
               }
               className={`flex-1 py-4 font-black tracking-widest transition-all ${
                 formData.tipoMovimiento === "PARTIDA"
@@ -305,10 +514,13 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
             <h2 className="font-black tracking-widest text-indigo-400 flex items-center gap-3">
               <RefreshCcw
                 size={20}
-                className={isSubmitting ? "animate-spin" : ""}
+                className={
+                  isSubmitting ? "animate-spin" : ""
+                }
               />
               EDITANDO: {flightToEdit.nroRegistro}
             </h2>
+
             <button
               type="button"
               onClick={clearEdit}
@@ -320,13 +532,16 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="p-8 space-y-8">
-        {/* Fila 1: Fecha, Hora, Matrícula */}
+      <form
+        onSubmit={handleSubmit}
+        className="p-8 space-y-8"
+      >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1">
             <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">
               Fecha
             </label>
+
             <input
               type="date"
               name="fecha"
@@ -336,10 +551,12 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
               required
             />
           </div>
+
           <div className="space-y-1">
             <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">
               Hora
             </label>
+
             <input
               type="time"
               name="hora"
@@ -349,10 +566,12 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
               required
             />
           </div>
+
           <div className="space-y-1">
             <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">
               Matrícula
             </label>
+
             <input
               type="text"
               name="matricula"
@@ -365,7 +584,6 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
           </div>
         </div>
 
-        {/* Fila 2: Aeronave, Propietario, Ruta */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <input
             type="text"
@@ -376,6 +594,7 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
             className="p-3 bg-slate-800 text-white rounded-lg border border-slate-700 uppercase outline-none"
             required
           />
+
           <input
             type="text"
             name="propietario"
@@ -384,13 +603,18 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
             onChange={handleChange}
             className="p-3 bg-slate-800 text-white rounded-lg border border-slate-700 uppercase outline-none"
           />
+
           <input
             type="text"
             name={
-              formData.tipoMovimiento === "ARRIBO" ? "procedencia" : "destino"
+              formData.tipoMovimiento === "ARRIBO"
+                ? "procedencia"
+                : "destino"
             }
             placeholder={
-              formData.tipoMovimiento === "ARRIBO" ? "PROCEDENCIA" : "DESTINO"
+              formData.tipoMovimiento === "ARRIBO"
+                ? "PROCEDENCIA"
+                : "DESTINO"
             }
             value={
               formData.tipoMovimiento === "ARRIBO"
@@ -403,10 +627,10 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
           />
         </div>
 
-        {/* Sección de Manifiesto */}
         <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-6">
           <h3 className="text-blue-400 font-black text-sm uppercase tracking-widest flex items-center gap-2">
-            <Users size={18} /> Manifiesto de Personas
+            <Users size={18} />
+            Manifiesto de Personas
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
@@ -422,6 +646,7 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
                 <option value="CEDULA">CÉDULA</option>
               </select>
             </div>
+
             <div className="md:col-span-3">
               <input
                 type="text"
@@ -432,6 +657,7 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
                 className="w-full p-3 bg-slate-900 text-white rounded-lg border border-slate-700 font-mono outline-none text-sm"
               />
             </div>
+
             <div className="md:col-span-5">
               <input
                 type="text"
@@ -442,6 +668,7 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
                 className="w-full p-3 bg-slate-900 text-white rounded-lg border border-slate-700 uppercase outline-none text-sm"
               />
             </div>
+
             <div className="md:col-span-2">
               <input
                 type="text"
@@ -457,32 +684,41 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
             <div className="md:col-span-3">
               <label className="text-[9px] text-amber-500 font-bold uppercase ml-1 flex gap-2 items-center">
-                <Briefcase size={12} /> Mano (Kg)
+                <Briefcase size={12} />
+                Mano (Kg)
               </label>
+
               <input
                 type="number"
+                min="0"
                 name="equipajeMano"
                 value={personaActual.equipajeMano}
                 onChange={handlePersonaChange}
                 className="w-full p-3 bg-slate-900 text-amber-500 rounded-lg border border-slate-700 outline-none text-sm font-bold"
               />
             </div>
+
             <div className="md:col-span-3">
               <label className="text-[9px] text-blue-400 font-bold uppercase ml-1 flex gap-2 items-center">
-                <Package size={12} /> Bodega (Kg)
+                <Package size={12} />
+                Bodega (Kg)
               </label>
+
               <input
                 type="number"
+                min="0"
                 name="equipajeBodega"
                 value={personaActual.equipajeBodega}
                 onChange={handlePersonaChange}
                 className="w-full p-3 bg-slate-900 text-blue-400 rounded-lg border border-slate-700 outline-none text-sm font-bold"
               />
             </div>
+
             <div className="md:col-span-3">
               <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
                 Rol
               </label>
+
               <select
                 name="tripPax"
                 value={personaActual.tripPax}
@@ -493,52 +729,105 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
                 <option value="P">PASAJERO</option>
               </select>
             </div>
+
             <div className="md:col-span-3">
               <button
                 type="button"
                 onClick={agregarPersonaALista}
                 className="w-full h-11.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center gap-2 font-black text-xs transition-all uppercase shadow-lg shadow-blue-900/20"
               >
-                <UserPlus size={18} /> Agregar
+                <UserPlus size={18} />
+                Agregar
               </button>
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {listaPersonas.map((p, index) => (
+          <div className="mt-6 grid grid-cols-1 gap-3">
+            {listaPersonas.map((persona, index) => (
               <div
-                key={index}
-                className="flex items-center justify-between bg-slate-900 p-4 rounded-xl border border-slate-800"
+                key={`${persona.nroDni}-${index}`}
+                className="bg-slate-900 p-4 rounded-xl border border-slate-800"
               >
-                <div>
-                  <div className="text-slate-200 font-bold text-xs uppercase">
-                    {p.apellidoNombre}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-slate-200 font-bold text-xs uppercase">
+                      {persona.apellidoNombre}
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 font-mono mt-1">
+                      {persona.nacionalidad} —{" "}
+                      {persona.nroDni} ({persona.tripPax})
+                    </div>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono">
-                    {p.nacionalidad} — {p.nroDni} ({p.tripPax})
+
+                  <button
+                    type="button"
+                    onClick={() => eliminarPersona(index)}
+                    className="text-slate-600 hover:text-red-500 p-2"
+                    title="Eliminar persona"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div>
+                    <label className="text-[9px] text-amber-500 font-bold uppercase flex items-center gap-1 mb-1">
+                      <Briefcase size={11} />
+                      Mano (Kg)
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      value={Number(
+                        persona.equipajeMano || 0
+                      )}
+                      onChange={(e) =>
+                        actualizarEquipajePersona(
+                          index,
+                          "equipajeMano",
+                          e.target.value
+                        )
+                      }
+                      className="w-full p-2.5 bg-slate-950 text-amber-400 rounded-lg border border-slate-700 outline-none focus:border-amber-500 text-sm font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] text-blue-400 font-bold uppercase flex items-center gap-1 mb-1">
+                      <Package size={11} />
+                      Bodega (Kg)
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      value={Number(
+                        persona.equipajeBodega || 0
+                      )}
+                      onChange={(e) =>
+                        actualizarEquipajePersona(
+                          index,
+                          "equipajeBodega",
+                          e.target.value
+                        )
+                      }
+                      className="w-full p-2.5 bg-slate-950 text-blue-400 rounded-lg border border-slate-700 outline-none focus:border-blue-500 text-sm font-bold"
+                    />
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setListaPersonas((prev) =>
-                      prev.filter((_, i) => i !== index)
-                    )
-                  }
-                  className="text-slate-600 hover:text-red-500 p-2"
-                >
-                  <Trash2 size={16} />
-                </button>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Observaciones */}
         <div className="space-y-2">
           <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest ml-1 flex items-center gap-2">
-            <MessageSquare size={14} /> Observaciones
+            <MessageSquare size={14} />
+            Observaciones
           </label>
+
           <textarea
             name="observaciones"
             value={formData.observaciones}
@@ -547,43 +836,74 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
           />
         </div>
 
-        {/* Firma del Oficial */}
         <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1">
             <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
               Grado
             </label>
+
             <select
               name="gradoOficial"
               value={formData.gradoOficial}
               onChange={handleChange}
               className="w-full p-3 bg-slate-900 text-white border border-slate-700 rounded-lg font-bold outline-none text-sm"
             >
-              <option value="AYUDANTE">AYUDANTE</option>
-              <option value="PRINCIPAL">PRINCIPAL</option>
-              <option value="MAYOR">MAYOR</option>
-              <option value="JEFE">JEFE</option>
-              <option value="SUBINSPECTOR">SUBINSPECTOR</option>
+              <option value="AYUDANTE">OFICIAL AYUDANTE</option>
+              <option value="PRINCIPAL">OFICIAL PRINCIPAL</option>
+              <option value="MAYOR">OFICIAL MAYOR</option>
+              <option value="JEFE">OFICIAL JEFE</option>
+              <option value="SUBINSPECTOR">
+                SUBINSPECTOR
+              </option>
               <option value="INSPECTOR">INSPECTOR</option>
             </select>
           </div>
-          <div className="space-y-1">
+
+          <div className="space-y-1 relative">
             <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
               Firma Oficial
             </label>
+
             <input
               type="text"
               name="nombreOficial"
               value={formData.nombreOficial}
-              onChange={handleChange}
+              onChange={handleOficialNombreChange}
+              autoComplete="off"
+              spellCheck={false}
               className="w-full p-3 bg-slate-900 text-white border border-slate-700 rounded-lg uppercase outline-none text-sm"
               required
             />
+
+            {!oficialSeleccionado && oficialesSugeridos.length > 0 && (
+              <div className="absolute z-50 left-0 right-0 top-full mt-1 overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-2xl">
+                {oficialesSugeridos.map((oficial, index) => (
+                  <button
+                    key={`${oficial.lupOficial || oficial.nombreOficial}-${index}`}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      seleccionarOficial(oficial);
+                    }}
+                    className="w-full px-4 py-3 text-left transition hover:bg-slate-800 border-b border-slate-800 last:border-b-0"
+                  >
+                    <div className="text-sm font-bold text-white uppercase">
+                      {oficial.nombreOficial}
+                    </div>
+                    <div className="mt-1 text-[10px] font-semibold text-slate-400 uppercase">
+                      {oficial.gradoOficial || "SIN GRADO"} · L.U.P. {oficial.lupOficial || "-"}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
           <div className="space-y-1">
             <label className="text-[9px] text-slate-500 font-bold uppercase ml-1">
               L.U.P.
             </label>
+
             <input
               type="text"
               name="lupOficial"
@@ -595,35 +915,55 @@ const FlightForm = ({ onFlightAdded, flightToEdit, clearEdit }) => {
           </div>
         </div>
 
-        {/* Botón Submit */}
         <button
           type="submit"
           disabled={isSubmitting}
           className={`w-full py-5 rounded-xl font-black text-white transition-all shadow-2xl flex items-center justify-center gap-3 text-lg tracking-widest ${
-            isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+            isSubmitting
+              ? "opacity-50 cursor-not-allowed"
+              : ""
           } ${
             flightToEdit
               ? "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/40"
               : formData.tipoMovimiento === "ARRIBO"
-              ? "bg-blue-600 hover:bg-blue-500"
-              : "bg-amber-600 hover:bg-amber-500"
+                ? "bg-blue-600 hover:bg-blue-500"
+                : "bg-amber-600 hover:bg-amber-500"
           }`}
         >
           {isSubmitting ? (
-            <RefreshCcw className="animate-spin" size={24} />
+            <RefreshCcw
+              className="animate-spin"
+              size={24}
+            />
           ) : flightToEdit ? (
             <RefreshCcw size={24} />
           ) : (
             <Send size={24} />
           )}
+
           {isSubmitting
             ? "PROCESANDO..."
             : flightToEdit
-            ? "ACTUALIZAR REGISTRO"
-            : "FINALIZAR REGISTRO"}
+              ? "ACTUALIZAR REGISTRO"
+              : "FINALIZAR REGISTRO"}
         </button>
       </form>
     </div>
+  );
+};
+
+const FlightForm = (props) => {
+  const { flightToEdit } = props;
+
+  const formKey = flightToEdit
+    ? `${flightToEdit._id}-${flightToEdit.updatedAt || ""}`
+    : "nuevo-vuelo";
+
+  return (
+    <FlightFormContent
+      key={formKey}
+      {...props}
+    />
   );
 };
 

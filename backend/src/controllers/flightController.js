@@ -1,64 +1,101 @@
-import Flight from "../models/Flight.js";
+import prisma from "../config/prisma.js";
+import { generateSMA } from "../utils/generateSMA.js";
 
-/**
- * ✅ Obtener vuelo por ID
- * GET /api/flights/:id
- * (Esto soluciona el 404 cuando el front llama /flights/<id>)
- */
+const serializeFlight = (flight) => {
+  const { id, personas, ...data } = flight;
+
+  return {
+    _id: id,
+    ...data,
+    fecha: flight.fecha.toISOString().slice(0, 10),
+    hora: flight.hora.toISOString().slice(11, 16),
+    personas: personas.map(({ id: personaId, flightId, ...persona }) => persona),
+  };
+};
+
+const toDate = (value) => {
+  return new Date(`${String(value).trim()}T00:00:00.000Z`);
+};
+
+const toTime = (value) => {
+  const time = String(value).trim();
+  const normalized = time.length === 5 ? `${time}:00` : time;
+
+  return new Date(`1970-01-01T${normalized}.000Z`);
+};
+
+const normalizePerson = (persona) => ({
+  apellidoNombre: String(persona.apellidoNombre || "")
+    .toUpperCase()
+    .trim(),
+  tipoDocumento: String(
+    persona.tipoDocumento || persona.tipoDni || "DNI"
+  )
+    .toUpperCase()
+    .trim(),
+  nroDni: String(persona.nroDni || "").trim(),
+  tripPax: String(persona.tripPax || "T").toUpperCase().trim(),
+  nacionalidad: String(persona.nacionalidad || "ARG")
+    .toUpperCase()
+    .trim(),
+  equipajeMano: Number(persona.equipajeMano || 0),
+  equipajeBodega: Number(persona.equipajeBodega || 0),
+});
+
 export const getFlightById = async (req, res) => {
   try {
-    const flight = await Flight.findById(req.params.id).lean();
+    const flight = await prisma.flight.findUnique({
+      where: {
+        id: req.params.id,
+      },
+      include: {
+        personas: true,
+      },
+    });
 
     if (!flight) {
-      return res.status(404).json({ message: "Registro no encontrado" });
+      return res.status(404).json({
+        message: "Registro no encontrado",
+      });
     }
 
-    return res.status(200).json(flight);
+    return res.status(200).json(serializeFlight(flight));
   } catch (error) {
-    // Si el ID no es válido (por ejemplo, no es ObjectId), Mongoose cae acá
-    return res.status(400).json({
-      message: "ID inválido o error al buscar el registro",
+    console.error("getFlightById error:", error.message);
+
+    return res.status(500).json({
+      message: "Error al buscar el registro",
       error: error.message,
     });
   }
 };
 
-// 1. Obtener todos los vuelos - OPTIMIZADO PARA EVITAR ERROR 400
 export const getFlights = async (req, res) => {
   try {
-    // Intentamos la consulta con el orden deseado
-    const flights = await Flight.find()
-      .sort({
-        fecha: -1,
-        hora: -1,
-        createdAt: -1,
-      })
-      .lean();
+    const flights = await prisma.flight.findMany({
+      include: {
+        personas: true,
+      },
+      orderBy: [
+        { fecha: "desc" },
+        { hora: "desc" },
+        { createdAt: "desc" },
+      ],
+    });
 
-    return res.status(200).json(flights);
+    return res.status(200).json(flights.map(serializeFlight));
   } catch (error) {
-    console.error(
-      "⚠️ Error con Sort detallado, intentando consulta simple:",
-      error.message
-    );
+    console.error("getFlights error:", error.message);
 
-    try {
-      // Plan B: Si el error 400 es por el Sort o Índices, intentamos sin Sort
-      const simpleFlights = await Flight.find().lean();
-      return res.status(200).json(simpleFlights);
-    } catch (innerError) {
-      return res.status(500).json({
-        message: "Error crítico en el servidor",
-        error: innerError.message,
-      });
-    }
+    return res.status(500).json({
+      message: "Error al obtener los vuelos",
+      error: error.message,
+    });
   }
 };
 
-// 2. Crear un nuevo registro de vuelo
 export const createFlight = async (req, res) => {
   try {
-    // 1) Validar campos obligatorios del vuelo
     const required = [
       "fecha",
       "hora",
@@ -71,8 +108,9 @@ export const createFlight = async (req, res) => {
     ];
 
     const missing = required.filter(
-      (k) => !req.body?.[k] || String(req.body[k]).trim() === ""
+      (key) => !req.body?.[key] || String(req.body[key]).trim() === ""
     );
+
     if (missing.length > 0) {
       return res.status(400).json({
         message: "Faltan datos obligatorios",
@@ -80,59 +118,88 @@ export const createFlight = async (req, res) => {
       });
     }
 
-    // 2) Validar manifiesto
     const { personas } = req.body;
+
     if (!Array.isArray(personas) || personas.length === 0) {
       return res.status(400).json({
         message: "El manifiesto de personas no puede estar vacío.",
       });
     }
 
-    // 3) Normalizar datos (mayúsculas, trims, compat tipoDocumento/tipoDni)
     const payload = {
-      ...req.body,
-      estado: "ACTIVO",
-      fecha: String(req.body.fecha).trim(),
-      hora: String(req.body.hora).trim(),
+      fecha: toDate(req.body.fecha),
+      hora: toTime(req.body.hora),
       matricula: String(req.body.matricula).toUpperCase().trim(),
       tipoAeronave: String(req.body.tipoAeronave).toUpperCase().trim(),
+      propietario: String(req.body.propietario || "").trim(),
+      procedencia: String(req.body.procedencia || "").toUpperCase().trim(),
+      destino: String(req.body.destino || "").toUpperCase().trim(),
+      tipoMovimiento: String(req.body.tipoMovimiento).toUpperCase().trim(),
+      gradoOficial: String(req.body.gradoOficial).toUpperCase().trim(),
       nombreOficial: String(req.body.nombreOficial).toUpperCase().trim(),
-      personas: personas.map((p) => ({
-        ...p,
-        apellidoNombre: String(p.apellidoNombre || "")
-          .toUpperCase()
-          .trim(),
-        nacionalidad: String(p.nacionalidad || "ARG")
-          .toUpperCase()
-          .trim(),
-        // soporta tanto tipoDocumento como tipoDni (por si tu front usa el viejo nombre)
-        tipoDocumento: p.tipoDocumento || p.tipoDni || "DNI",
-        nroDni: String(p.nroDni || "").trim(),
-      })),
+      lupOficial: String(req.body.lupOficial).trim(),
+      observaciones: String(req.body.observaciones || "").trim(),
+      estado: "ACTIVO",
+      personas: personas.map(normalizePerson),
     };
 
-    const savedFlight = await new Flight(payload).save();
-    return res.status(201).json(savedFlight);
+    const savedFlight = await prisma.$transaction(async (tx) => {
+      const nroRegistro = await generateSMA(tx);
+
+      const flight = await tx.flight.create({
+        data: {
+          nroRegistro,
+          fecha: payload.fecha,
+          hora: payload.hora,
+          matricula: payload.matricula,
+          tipoAeronave: payload.tipoAeronave,
+          propietario: payload.propietario,
+          procedencia: payload.procedencia,
+          destino: payload.destino,
+          tipoMovimiento: payload.tipoMovimiento,
+          gradoOficial: payload.gradoOficial,
+          nombreOficial: payload.nombreOficial,
+          lupOficial: payload.lupOficial,
+          observaciones: payload.observaciones,
+          estado: payload.estado,
+          personas: {
+            create: payload.personas,
+          },
+        },
+        include: {
+          personas: true,
+        },
+      });
+
+      await tx.officer.upsert({
+        where: {
+          lup: payload.lupOficial,
+        },
+        update: {
+          grado: payload.gradoOficial,
+          nombre: payload.nombreOficial,
+        },
+        create: {
+          grado: payload.gradoOficial,
+          nombre: payload.nombreOficial,
+          lup: payload.lupOficial,
+        },
+      });
+
+      return flight;
+    });
+
+    return res.status(201).json(serializeFlight(savedFlight));
   } catch (error) {
-    // ✅ DUPLICADO: mismo fecha + hora + matricula + tipoMovimiento (o nroRegistro)
-    if (error?.code === 11000) {
+    if (error?.code === "P2002") {
       return res.status(409).json({
         message:
-          "Ya existe un registro ACTIVO con esa fecha/hora/matrícula/movimiento (o nroRegistro duplicado).",
-        duplicateKey: error?.keyValue,
-      });
-    }
-
-    // ✅ VALIDACIÓN DEL MODELO
-    if (error?.name === "ValidationError") {
-      const details = Object.values(error.errors).map((e) => e.message);
-      return res.status(400).json({
-        message: "Error de validación",
-        details,
+          "Ya existe un registro ACTIVO con esa fecha/hora/matrícula/movimiento o número de registro.",
       });
     }
 
     console.error("createFlight error:", error);
+
     return res.status(500).json({
       message: "Error interno del servidor",
       error: error.message,
@@ -140,94 +207,227 @@ export const createFlight = async (req, res) => {
   }
 };
 
-// 3. Actualizar un registro (Edición o Anulación)
 export const updateFlight = async (req, res) => {
   try {
-    const payload = { ...req.body };
-    if (payload.matricula)
-      payload.matricula = payload.matricula.toUpperCase().trim();
-    if (payload.nombreOficial)
-      payload.nombreOficial = payload.nombreOficial.toUpperCase().trim();
-
-    if (Array.isArray(payload.personas)) {
-      payload.personas = payload.personas.map((p) => ({
-        ...p,
-        apellidoNombre: p.apellidoNombre?.toString().toUpperCase().trim(),
-        nacionalidad: (p.nacionalidad || "ARG").toString().toUpperCase().trim(),
-        tipoDocumento: p.tipoDocumento || "DNI",
-        nroDni: p.nroDni?.toString().trim(),
-      }));
+    if (
+      Array.isArray(req.body.personas) &&
+      req.body.personas.length === 0
+    ) {
+      return res.status(400).json({
+        message: "El manifiesto de personas no puede estar vacío.",
+      });
     }
 
-    delete payload.nroRegistro; // Protegemos el ID correlativo
+    const data = {};
 
-    const updatedFlight = await Flight.findByIdAndUpdate(
-      req.params.id,
-      payload,
-      { new: true, runValidators: true }
-    );
+    if (req.body.fecha !== undefined) {
+      data.fecha = toDate(req.body.fecha);
+    }
 
-    if (!updatedFlight)
-      return res.status(404).json({ message: "Registro no encontrado" });
+    if (req.body.hora !== undefined) {
+      data.hora = toTime(req.body.hora);
+    }
 
-    res.status(200).json(updatedFlight);
+    if (req.body.matricula !== undefined) {
+      data.matricula = String(req.body.matricula).toUpperCase().trim();
+    }
+
+    if (req.body.tipoAeronave !== undefined) {
+      data.tipoAeronave = String(req.body.tipoAeronave)
+        .toUpperCase()
+        .trim();
+    }
+
+    if (req.body.propietario !== undefined) {
+      data.propietario = String(req.body.propietario || "").trim();
+    }
+
+    if (req.body.procedencia !== undefined) {
+      data.procedencia = String(req.body.procedencia || "")
+        .toUpperCase()
+        .trim();
+    }
+
+    if (req.body.destino !== undefined) {
+      data.destino = String(req.body.destino || "")
+        .toUpperCase()
+        .trim();
+    }
+
+    if (req.body.tipoMovimiento !== undefined) {
+      data.tipoMovimiento = String(req.body.tipoMovimiento)
+        .toUpperCase()
+        .trim();
+    }
+
+    if (req.body.gradoOficial !== undefined) {
+      data.gradoOficial = String(req.body.gradoOficial)
+        .toUpperCase()
+        .trim();
+    }
+
+    if (req.body.nombreOficial !== undefined) {
+      data.nombreOficial = String(req.body.nombreOficial)
+        .toUpperCase()
+        .trim();
+    }
+
+    if (req.body.lupOficial !== undefined) {
+      data.lupOficial = String(req.body.lupOficial).trim();
+    }
+
+    if (req.body.observaciones !== undefined) {
+      data.observaciones = String(req.body.observaciones || "").trim();
+    }
+
+    if (req.body.estado !== undefined) {
+      data.estado = String(req.body.estado).toUpperCase().trim();
+    }
+
+    if (Array.isArray(req.body.personas)) {
+      data.personas = {
+        deleteMany: {},
+        create: req.body.personas.map(normalizePerson),
+      };
+    }
+
+    const updatedFlight = await prisma.$transaction(async (tx) => {
+      const existingFlight = await tx.flight.findUnique({
+        where: {
+          id: req.params.id,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!existingFlight) {
+        return null;
+      }
+
+      return tx.flight.update({
+        where: {
+          id: req.params.id,
+        },
+        data,
+        include: {
+          personas: true,
+        },
+      });
+    });
+
+    if (!updatedFlight) {
+      return res.status(404).json({
+        message: "Registro no encontrado",
+      });
+    }
+
+    return res.status(200).json(serializeFlight(updatedFlight));
   } catch (error) {
-    res
-      .status(400)
-      .json({ message: "Error al actualizar", error: error.message });
+    if (error?.code === "P2002") {
+      return res.status(409).json({
+        message:
+          "Ya existe un registro ACTIVO con esa fecha/hora/matrícula/movimiento.",
+      });
+    }
+
+    console.error("updateFlight error:", error);
+
+    return res.status(400).json({
+      message: "Error al actualizar",
+      error: error.message,
+    });
   }
 };
 
-// 4. Eliminar registro
-export const deleteFlight = async (req, res) => {
-  try {
-    const flight = await Flight.findByIdAndDelete(req.params.id);
-    if (!flight)
-      return res.status(404).json({ message: "Registro no encontrado" });
-    res.status(200).json({ message: "Eliminado correctamente" });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error al eliminar", error: error.message });
-  }
-};
-
-// 5. Búsquedas
 export const searchByDni = async (req, res) => {
   try {
-    const flights = await Flight.find({
-      "personas.nroDni": req.params.dni.trim(),
-    }).sort({ fecha: -1 });
-    res.status(200).json(flights);
+    const dni = req.params.dni.trim();
+
+    const flights = await prisma.flight.findMany({
+      where: {
+        personas: {
+          some: {
+            nroDni: dni,
+          },
+        },
+      },
+      include: {
+        personas: true,
+      },
+      orderBy: {
+        fecha: "desc",
+      },
+    });
+
+    return res.status(200).json(flights.map(serializeFlight));
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error en búsqueda", error: error.message });
+    console.error("searchByDni error:", error.message);
+
+    return res.status(500).json({
+      message: "Error en búsqueda",
+      error: error.message,
+    });
   }
 };
 
 export const searchByMatricula = async (req, res) => {
   try {
-    const flights = await Flight.find({
-      matricula: req.params.matricula.toUpperCase().trim(),
-    }).sort({ fecha: -1 });
-    res.status(200).json(flights);
+    const matricula = req.params.matricula.toUpperCase().trim();
+
+    const flights = await prisma.flight.findMany({
+      where: {
+        matricula,
+      },
+      include: {
+        personas: true,
+      },
+      orderBy: {
+        fecha: "desc",
+      },
+    });
+
+    return res.status(200).json(flights.map(serializeFlight));
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error en búsqueda", error: error.message });
+    console.error("searchByMatricula error:", error.message);
+
+    return res.status(500).json({
+      message: "Error en búsqueda",
+      error: error.message,
+    });
   }
 };
 
 export const searchOficialByName = async (req, res) => {
   try {
-    const flights = await Flight.find({
-      nombreOficial: { $regex: req.params.nombre, $options: "i" },
-    }).sort({ fecha: -1 });
-    res.status(200).json(flights);
+    const nombre = req.params.nombre.trim();
+
+    const officers = await prisma.officer.findMany({
+      where: {
+        nombre: {
+          contains: nombre,
+          mode: "insensitive",
+        },
+      },
+      orderBy: {
+        nombre: "asc",
+      },
+      take: 10,
+    });
+
+    const results = officers.map((officer) => ({
+      gradoOficial: officer.grado,
+      nombreOficial: officer.nombre,
+      lupOficial: officer.lup,
+    }));
+
+    return res.status(200).json(results);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error en búsqueda", error: error.message });
+    console.error("searchOficialByName error:", error.message);
+
+    return res.status(500).json({
+      message: "Error en búsqueda",
+      error: error.message,
+    });
   }
 };
