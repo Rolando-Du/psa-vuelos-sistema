@@ -23,76 +23,95 @@ const migrate = async () => {
       Counter.find({}).lean(),
     ]);
 
-    const [pgFlights, pgUsers, pgCounters] = await Promise.all([
-      prisma.flight.count(),
-      prisma.user.count(),
-      prisma.counter.count(),
-    ]);
+    await prisma.$transaction(
+      async (tx) => {
+        const [pgFlights, pgUsers, pgCounters, pgPersons, pgOfficers] =
+          await Promise.all([
+            tx.flight.count(),
+            tx.user.count(),
+            tx.counter.count(),
+            tx.flightPerson.count(),
+            tx.officer.count(),
+          ]);
 
-    if (pgFlights > 0 || pgUsers > 0 || pgCounters > 0) {
-      throw new Error("PostgreSQL no está vacío. Migración cancelada.");
-    }
+        if (
+          pgFlights > 0 ||
+          pgUsers > 0 ||
+          pgCounters > 0 ||
+          pgPersons > 0 ||
+          pgOfficers > 0
+        ) {
+          throw new Error(
+            "PostgreSQL no está vacío. Migración cancelada."
+          );
+        }
 
-    for (const user of mongoUsers) {
-      await prisma.user.create({
-        data: {
-          id: user._id.toString(),
-          username: user.username,
-          password: user.password,
-          nombre: user.nombre,
-          lup: user.lup,
-          role: user.role,
-          createdAt: user.createdAt,
-          updatedAt: user.updatedAt,
-        },
-      });
-    }
+        for (const user of mongoUsers) {
+          await tx.user.create({
+            data: {
+              id: user._id.toString(),
+              username: user.username,
+              password: user.password,
+              nombre: user.nombre,
+              lup: user.lup,
+              role: user.role,
+              createdAt: user.createdAt,
+              updatedAt: user.updatedAt,
+            },
+          });
+        }
 
-    for (const counter of mongoCounters) {
-      await prisma.counter.create({
-        data: {
-          id: counter._id.toString(),
-          seq: counter.seq ?? 0,
-          createdAt: counter.createdAt,
-          updatedAt: counter.updatedAt,
-        },
-      });
-    }
+        for (const counter of mongoCounters) {
+          await tx.counter.create({
+            data: {
+              id: counter._id.toString(),
+              seq: counter.seq ?? 0,
+              createdAt: counter.createdAt,
+              updatedAt: counter.updatedAt,
+            },
+          });
+        }
 
-    for (const flight of mongoFlights) {
-      await prisma.flight.create({
-        data: {
-          id: flight._id.toString(),
-          nroRegistro: flight.nroRegistro,
-          fecha: toDate(flight.fecha),
-          hora: toTime(flight.hora),
-          matricula: flight.matricula,
-          tipoAeronave: flight.tipoAeronave,
-          propietario: flight.propietario ?? "",
-          procedencia: flight.procedencia ?? "",
-          destino: flight.destino ?? "",
-          tipoMovimiento: flight.tipoMovimiento,
-          gradoOficial: flight.gradoOficial,
-          nombreOficial: flight.nombreOficial,
-          lupOficial: flight.lupOficial,
-          observaciones: flight.observaciones ?? "",
-          estado: flight.estado ?? "ACTIVO",
-          createdAt: flight.createdAt,
-          updatedAt: flight.updatedAt,
-          personas: {
-            create: flight.personas.map((persona) => ({
-              apellidoNombre: persona.apellidoNombre,
-              tipoDocumento: persona.tipoDocumento ?? "DNI",
-              nroDni: persona.nroDni,
-              tripPax: persona.tripPax ?? "T",
-              nacionalidad: persona.nacionalidad ?? "ARG",
-              equipajeMano: persona.equipajeMano ?? 0,
-              equipajeBodega: persona.equipajeBodega ?? 0,
-            })),
-          },
-        },
-      });
-    }
+        for (const flight of mongoFlights) {
+          await tx.flight.create({
+            data: {
+              id: flight._id.toString(),
+              nroRegistro: flight.nroRegistro,
+              fecha: toDate(flight.fecha),
+              hora: toTime(flight.hora),
+              matricula: flight.matricula,
+              tipoAeronave: flight.tipoAeronave,
+              propietario: flight.propietario ?? "",
+              procedencia: flight.procedencia ?? "",
+              destino: flight.destino ?? "",
+              tipoMovimiento: flight.tipoMovimiento,
+              gradoOficial: flight.gradoOficial,
+              nombreOficial: flight.nombreOficial,
+              lupOficial: flight.lupOficial,
+              observaciones: flight.observaciones ?? "",
+              estado: flight.estado ?? "ACTIVO",
+              createdAt: flight.createdAt,
+              updatedAt: flight.updatedAt,
+              personas: {
+                create: flight.personas.map((persona) => ({
+                  apellidoNombre: persona.apellidoNombre,
+                  tipoDocumento: persona.tipoDocumento ?? "DNI",
+                  nroDni: persona.nroDni,
+                  tripPax: persona.tripPax ?? "T",
+                  nacionalidad: persona.nacionalidad ?? "ARG",
+                  equipajeMano: persona.equipajeMano ?? 0,
+                  equipajeBodega: persona.equipajeBodega ?? 0,
+                })),
+              },
+            },
+          });
+        }
+      },
+      {
+        maxWait: 10000,
+        timeout: 60000,
+      }
+    );
 
     console.log("Migración completada:");
     console.log(`Usuarios: ${mongoUsers.length}`);
