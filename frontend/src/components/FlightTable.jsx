@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import api from "../api/axios";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -180,6 +181,26 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
     setIsModalOpen(false);
     setSelectedFlight(null);
   }, []);
+
+  useEffect(() => {
+    if (!isModalOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        handleCloseModal();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isModalOpen, handleCloseModal]);
 
   const handleFlightActionSuccess = useCallback(async () => {
     await fetchFlights();
@@ -533,32 +554,48 @@ export default function FlightTable({ refreshTrigger, onEdit }) {
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto p-2">
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 p-2 rounded-2xl w-full max-w-4xl shadow-2xl my-auto">
-            <div className="p-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-white uppercase">
-                Editar Registro SMA
-              </h2>
-
-              <button
-                onClick={handleCloseModal}
-                className="text-slate-500 hover:text-white font-bold transition-colors"
+      {isModalOpen &&
+        selectedFlight &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-9999 overflow-y-auto bg-black/80 backdrop-blur-sm"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                handleCloseModal();
+              }
+            }}
+          >
+            <div className="flex min-h-full items-start justify-center p-4 sm:p-6">
+              <div
+                className="my-4 w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-2 shadow-2xl"
+                onMouseDown={(event) => event.stopPropagation()}
               >
-                ESC / CERRAR
-              </button>
-            </div>
+                <div className="sticky top-0 z-10 flex items-center justify-between rounded-xl bg-slate-900 p-4">
+                  <h2 className="text-xl font-bold uppercase text-white">
+                    Editar Registro SMA
+                  </h2>
 
-            <div className="max-h-[80vh] overflow-y-auto rounded-xl">
-              <FlightForm
-                flightToEdit={selectedFlight}
-                onFlightAdded={handleFlightActionSuccess}
-                clearEdit={handleCloseModal}
-              />
+                  <button
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="font-bold text-slate-500 transition-colors hover:text-white"
+                  >
+                    ESC / CERRAR
+                  </button>
+                </div>
+
+                <div className="max-h-[calc(100vh-8rem)] overflow-y-auto rounded-xl">
+                  <FlightForm
+                    flightToEdit={selectedFlight}
+                    onFlightAdded={handleFlightActionSuccess}
+                    clearEdit={handleCloseModal}
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       <div className="bg-slate-900/40 backdrop-blur-md p-6 border border-slate-800 rounded-2xl shadow-2xl">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
